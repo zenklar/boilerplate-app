@@ -8,14 +8,14 @@ import {
   Platform,
   PanResponder,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGameUIStore } from '../store/gameStore';
+import { useShipStore } from '../store/shipStore';
+import { SHIPS } from '../constants/ships';
+import ShipPreview from './ShipPreview';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
-const HIGH_SCORE_KEY = '@asteroids/high_score';
 const TICK_MS = 16;
-const SHIP_W = 20;
-const SHIP_H = 26;
+const SHIP_SIZE = 44;
 const BULLET_SPEED = 8;
 const BULLET_LIFETIME = 62;
 const THRUST_PWR = 0.13;
@@ -105,10 +105,15 @@ const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 export default function AsteroidsGame() {
   const [area, setArea] = useState({ w: 0, h: 0 });
   const [, setTick] = useState(0);
-  const [highScore, setHighScore] = useState(0);
   const [newHS, setNewHS] = useState(false);
 
-  const hsRef = useRef(0);
+  const highScore = useGameUIStore((s) => s.highScore);
+  const updateHighScore = useGameUIStore((s) => s.updateHighScore);
+  const loadHighScore = useGameUIStore((s) => s.loadHighScore);
+  const selectedShipId = useShipStore((s) => s.selectedShipId);
+  const loadSelectedShip = useShipStore((s) => s.loadSelectedShip);
+  const selectedShip = SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0];
+
   const gsRef = useRef<GS | null>(null);
   // Game object bounds (game area height = canvas height - ctrl overlay height)
   const dimRef = useRef({ w: 0, h: 0 });
@@ -126,13 +131,10 @@ export default function AsteroidsGame() {
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
 
-  /* ── Load high score ── */
+  /* ── Load persisted state ── */
   useEffect(() => {
-    AsyncStorage.getItem(HIGH_SCORE_KEY).then((v) => {
-      const n = v ? parseInt(v, 10) : 0;
-      hsRef.current = n;
-      setHighScore(n);
-    });
+    loadHighScore();
+    loadSelectedShip();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -239,7 +241,7 @@ export default function AsteroidsGame() {
       /* Fire */
       if (c.fire && c.fireCD <= 0) {
         const r = toR(g.sAngle - 90);
-        const tip = SHIP_H / 2 + 5;
+        const tip = SHIP_SIZE / 2 + 4;
         g.bullets.push({
           x: g.sx + Math.cos(r) * tip,
           y: g.sy + Math.sin(r) * tip,
@@ -294,14 +296,8 @@ export default function AsteroidsGame() {
             g.lives--;
             if (g.lives <= 0) {
               g.phase = 'gameover';
-              if (g.score > hsRef.current) {
-                hsRef.current = g.score;
-                setHighScore(g.score);
-                setNewHS(true);
-                AsyncStorage.setItem(HIGH_SCORE_KEY, String(g.score));
-              } else {
-                setNewHS(false);
-              }
+              setNewHS(g.score > useGameUIStore.getState().highScore);
+              updateHighScore(g.score);
             } else {
               g.sx = W / 2; g.sy = H / 2;
               g.svx = 0; g.svy = 0; g.sAngle = 0;
@@ -442,8 +438,8 @@ export default function AsteroidsGame() {
   let flameX = 0, flameY = 0;
   if (g && thrustOn) {
     const fr = toR(g.sAngle + 90);
-    flameX = g.sx + Math.cos(fr) * (SHIP_H / 2 + 2);
-    flameY = g.sy + Math.sin(fr) * (SHIP_H / 2 + 2);
+    flameX = g.sx + Math.cos(fr) * (SHIP_SIZE / 2 + 2);
+    flameY = g.sy + Math.sin(fr) * (SHIP_SIZE / 2 + 2);
   }
 
   return (
@@ -477,11 +473,14 @@ export default function AsteroidsGame() {
 
         {/* Ship — only during active play */}
         {g && g.phase === 'playing' && shipVisible && (
-          <View style={[s.ship, {
-            left: g.sx - SHIP_W / 2,
-            top: g.sy - SHIP_H / 2,
+          <View style={{
+            position: 'absolute',
+            left: g.sx - SHIP_SIZE / 2,
+            top: g.sy - SHIP_SIZE / 2,
             transform: [{ rotate: `${g.sAngle}deg` }],
-          }]} />
+          }}>
+            <ShipPreview ship={selectedShip} size={SHIP_SIZE} />
+          </View>
         )}
 
         {/* ── HUD (score + high score + lives) ── */}
@@ -613,14 +612,6 @@ const s = StyleSheet.create({
   },
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
-  },
-  ship: {
-    position: 'absolute',
-    width: 0, height: 0,
-    borderLeftWidth: SHIP_W / 2, borderRightWidth: SHIP_W / 2, borderBottomWidth: SHIP_H,
-    borderStyle: 'solid',
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFF',
-    backgroundColor: 'transparent',
   },
   flame: {
     position: 'absolute', width: 8, height: 10, borderRadius: 4,
