@@ -12,6 +12,7 @@ import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
+import { playShoot, playThrustStart, playExplosion } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const TICK_MS = 16;
@@ -31,9 +32,9 @@ const JOY_MAX = 52;
 const JOY_THUMB_R = 24;
 const JOY_DEAD = JOY_MAX * 0.18;
 
-const PARTICLE_MAX_LIFE = 28;
-const PARTICLE_SPAWN = 3;   // particles per thrust frame
-const PARTICLE_SPREAD = 0.8; // radians of cone spread at exhaust
+const PARTICLE_MAX_LIFE = 16;
+const PARTICLE_SPAWN = 2;
+const PARTICLE_SPREAD = 0.5;
 
 const RADII = { large: 44, medium: 26, small: 14 } as const;
 const SPEEDS: Record<string, [number, number]> = {
@@ -51,12 +52,14 @@ interface Asteroid {
   x: number; y: number; vx: number; vy: number;
   radius: number; size: Size;
   rot: number; rotSpeed: number;
+  aw: number; ah: number;  // render half-dimensions; radius is still used for collision
   br: [number, number, number, number];
 }
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Particle {
   id: number; x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; size: number;
+  kind: 'thrust' | 'debris';
 }
 interface GS {
   phase: Phase;
@@ -92,14 +95,30 @@ function mkAsteroid(
     do { x = rand(r, W - r); y = rand(r, H - r); tries++; }
     while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
   }
-  const br: [number, number, number, number] = [
-    r * rand(0.55, 1.45), r * rand(0.55, 1.45),
-    r * rand(0.55, 1.45), r * rand(0.55, 1.45),
-  ];
+  // Pick a random shape archetype for variety
+  let br: [number, number, number, number];
+  const roll = Math.random();
+  if (roll < 0.25) {
+    // Jagged — alternating sharp and round corners
+    br = [r * rand(0.05, 0.35), r * rand(0.8, 2.0), r * rand(0.05, 0.3), r * rand(0.9, 2.0)];
+  } else if (roll < 0.45) {
+    // One sharp corner, rest rounded
+    const b = r * rand(0.7, 1.4);
+    br = [r * rand(0.05, 0.22), b, b * rand(0.7, 1.2), b * rand(0.6, 1.0)];
+  } else if (roll < 0.7) {
+    // Fully irregular — all four corners different
+    br = [r * rand(0.1, 1.9), r * rand(0.1, 0.7), r * rand(0.8, 2.0), r * rand(0.1, 0.8)];
+  } else {
+    // Classic lumpy blob — all corners similar
+    br = [r * rand(0.5, 1.5), r * rand(0.5, 1.5), r * rand(0.5, 1.5), r * rand(0.5, 1.5)];
+  }
+  const aw = r * rand(0.8, 1.35);
+  const ah = r * rand(0.8, 1.35);
   return {
     id: uid(), x, y,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
-    radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5), br,
+    radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5),
+    aw, ah, br,
   };
 }
 
@@ -124,6 +143,7 @@ export default function AsteroidsGame() {
   const selectedShip = SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0];
 
   const gsRef = useRef<GS | null>(null);
+  const thrustSoundRef = useRef<{ stop: () => void } | null>(null);
   // Game object bounds (game area height = canvas height - ctrl overlay height)
   const dimRef = useRef({ w: 0, h: 0 });
   const ctrl = useRef({ left: false, right: false, thrust: false, fire: false, fireCD: 0 });
@@ -229,7 +249,7 @@ export default function AsteroidsGame() {
         if (c.right) g.sAngle += ROT_SPD;
       }
 
-      /* Thrust + particle spawn */
+      /* Thrust + particle spawn + thrust sound */
       if (c.thrust) {
         const r = toR(g.sAngle - 90);
         g.svx += Math.cos(r) * THRUST_PWR;
@@ -239,23 +259,30 @@ export default function AsteroidsGame() {
           g.svx = (g.svx / spd) * MAX_SPD;
           g.svy = (g.svy / spd) * MAX_SPD;
         }
-        // Emit exhaust particles from the rear of the ship
+        // Start thrust sound once
+        if (Platform.OS === 'web' && !thrustSoundRef.current) {
+          thrustSoundRef.current = playThrustStart();
+        }
         const exhaustR = toR(g.sAngle + 90);
         const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
         const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
         for (let i = 0; i < PARTICLE_SPAWN; i++) {
           const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
           const pDir = exhaustR + spread;
-          const pSpd = rand(1.2, 2.8);
+          const pSpd = rand(0.8, 2.0);
           g.particles.push({
             id: uid(),
-            x: ex + rand(-3, 3), y: ey + rand(-3, 3),
-            vx: Math.cos(pDir) * pSpd + g.svx * 0.3,
-            vy: Math.sin(pDir) * pSpd + g.svy * 0.3,
+            x: ex + rand(-2, 2), y: ey + rand(-2, 2),
+            vx: Math.cos(pDir) * pSpd + g.svx * 0.25,
+            vy: Math.sin(pDir) * pSpd + g.svy * 0.25,
             life: PARTICLE_MAX_LIFE, maxLife: PARTICLE_MAX_LIFE,
-            size: rand(3, 6),
+            size: rand(1.5, 3.5),
+            kind: 'thrust',
           });
         }
+      } else if (Platform.OS === 'web' && thrustSoundRef.current) {
+        thrustSoundRef.current.stop();
+        thrustSoundRef.current = null;
       }
 
       /* Friction & move */
@@ -276,6 +303,7 @@ export default function AsteroidsGame() {
           life: BULLET_LIFETIME,
         });
         c.fireCD = FIRE_CD;
+        if (Platform.OS === 'web') playShoot();
       }
       if (c.fireCD > 0) c.fireCD--;
 
@@ -286,7 +314,7 @@ export default function AsteroidsGame() {
 
       /* Particles */
       g.particles = g.particles
-        .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.94 }))
+        .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.92 }))
         .filter((p) => p.life > 0);
 
       /* Asteroids */
@@ -307,6 +335,20 @@ export default function AsteroidsGame() {
           if (d2(b.x, b.y, a.x, a.y) < a.radius ** 2) {
             deadA.add(a.id); deadB.add(bi);
             g.score += SCORE_MAP[a.size];
+            // Debris burst
+            const numDebris = a.size === 'large' ? 14 : a.size === 'medium' ? 9 : 5;
+            for (let di = 0; di < numDebris; di++) {
+              const dir = rand(0, Math.PI * 2);
+              const spd = rand(0.4, a.size === 'large' ? 3.5 : 2.5);
+              const dLife = Math.round(rand(12, 26));
+              g.particles.push({
+                id: uid(), x: a.x, y: a.y,
+                vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
+                life: dLife, maxLife: dLife,
+                size: rand(1.5, 3.5), kind: 'debris',
+              });
+            }
+            if (Platform.OS === 'web') playExplosion(a.size);
             if (a.size === 'large') {
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
@@ -326,6 +368,10 @@ export default function AsteroidsGame() {
           if (d2(g.sx, g.sy, a.x, a.y) < (a.radius * 0.8 + 9) ** 2) {
             g.lives--;
             if (g.lives <= 0) {
+              if (Platform.OS === 'web' && thrustSoundRef.current) {
+                thrustSoundRef.current.stop();
+                thrustSoundRef.current = null;
+              }
               g.phase = 'gameover';
               setNewHS(g.score > useGameUIStore.getState().highScore);
               updateHighScore(g.score);
@@ -380,6 +426,10 @@ export default function AsteroidsGame() {
 
   /* ── Back to menu ── */
   const handleBackToMenu = () => {
+    if (Platform.OS === 'web' && thrustSoundRef.current) {
+      thrustSoundRef.current.stop();
+      thrustSoundRef.current = null;
+    }
     setIsGamePlaying(false); // header/nav reappear, onLayout will fire
     if (gsRef.current) gsRef.current.phase = 'idle';
     // Reset fire state so buttons don't get stuck
@@ -475,10 +525,10 @@ export default function AsteroidsGame() {
           <View
             key={a.id}
             style={[s.asteroid, {
-              width: a.radius * 2, height: a.radius * 2,
+              width: a.aw * 2, height: a.ah * 2,
               borderTopLeftRadius: a.br[0], borderTopRightRadius: a.br[1],
               borderBottomRightRadius: a.br[2], borderBottomLeftRadius: a.br[3],
-              left: a.x - a.radius, top: a.y - a.radius,
+              left: a.x - a.aw, top: a.y - a.ah,
               transform: [{ rotate: `${a.rot}deg` }],
             }]}
           />
@@ -489,13 +539,19 @@ export default function AsteroidsGame() {
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
-        {/* Thruster particles — rendered behind ship */}
+        {/* Particles (thruster = white→blue, debris = white→gray) */}
         {g?.phase === 'playing' && g.particles.map((p) => {
-          const t = p.life / p.maxLife; // 1→0
-          // Colour shifts hot-white → orange → red as particle cools
-          const r = 255;
-          const gr = Math.round(t > 0.5 ? 255 : t * 2 * 200);
-          const bl = Math.round(t > 0.7 ? 255 * ((t - 0.7) / 0.3) : 0);
+          const t = p.life / p.maxLife;
+          let rgb: string;
+          if (p.kind === 'debris') {
+            const c = Math.round(160 + 95 * t);
+            rgb = `rgb(${c},${c},${c})`;
+          } else {
+            // Thruster: white (t=1) → light blue (t=0.5) → blue (t=0)
+            const rv = Math.round(Math.min(255, 255 * t * 1.6));
+            const gv = Math.round(Math.min(255, 220 * t * 1.6));
+            rgb = `rgb(${rv},${gv},255)`;
+          }
           return (
             <View
               key={p.id}
@@ -503,8 +559,8 @@ export default function AsteroidsGame() {
                 position: 'absolute',
                 width: p.size, height: p.size,
                 borderRadius: p.size / 2,
-                backgroundColor: `rgb(${r},${gr},${bl})`,
-                opacity: t * 0.85,
+                backgroundColor: rgb,
+                opacity: t * 0.9,
                 left: p.x - p.size / 2,
                 top: p.y - p.size / 2,
               }}
