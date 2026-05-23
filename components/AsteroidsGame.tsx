@@ -8,7 +8,6 @@ import {
   Platform,
   PanResponder,
 } from 'react-native';
-import Svg, { Polygon } from 'react-native-svg';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { SHIPS } from '../constants/ships';
@@ -530,27 +529,44 @@ export default function AsteroidsGame() {
       {/* ── Game canvas (fills all space) ── */}
       <View style={s.canvas}>
 
-        {/* Asteroids — SVG polygons for authentic irregular shapes */}
+        {/* Asteroids — SVG polygons on web, rounded fallback on native */}
         {g?.asteroids.map((a) => {
           const d = a.radius * 2;
+          const pts = asteroidPoints(a);
+          if (Platform.OS === 'web') {
+            // React Native Web runs on React DOM so raw SVG JSX works fine
+            const webStyle: any = {
+              position: 'absolute',
+              left: a.x - a.radius,
+              top: a.y - a.radius,
+              transform: `rotate(${a.rot}deg)`,
+              transformOrigin: `${a.radius}px ${a.radius}px`,
+              overflow: 'visible',
+            };
+            return (
+              // @ts-ignore — valid SVG JSX under React DOM / React Native Web
+              <svg key={a.id} width={d} height={d} style={webStyle}>
+                {/* @ts-ignore */}
+                <polygon points={pts} fill="white" stroke="#CCC" strokeWidth="1.5" />
+              </svg>
+            );
+          }
+          // Native fallback — irregular blob via border-radius
+          const br = a.verts.slice(0, 4).map((v) => v * 0.6);
           return (
-            <Svg
+            <View
               key={a.id}
-              width={d} height={d}
               style={{
                 position: 'absolute',
-                left: a.x - a.radius,
-                top: a.y - a.radius,
+                width: d, height: d,
+                left: a.x - a.radius, top: a.y - a.radius,
                 transform: [{ rotate: `${a.rot}deg` }],
+                backgroundColor: '#FFF',
+                borderRadius: a.radius * 0.65,
+                borderTopLeftRadius: br[0], borderTopRightRadius: br[1],
+                borderBottomRightRadius: br[2], borderBottomLeftRadius: br[3],
               }}
-            >
-              <Polygon
-                points={asteroidPoints(a)}
-                fill="#FFF"
-                stroke="#CCC"
-                strokeWidth={1.5}
-              />
-            </Svg>
+            />
           );
         })}
 
