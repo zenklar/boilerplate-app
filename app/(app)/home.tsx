@@ -1,11 +1,11 @@
 import { View, StyleSheet } from 'react-native';
-import { useTheme } from '../../theme';
+import AsteroidsGame from '../../components/AsteroidsGame';
 
 export default function Home() {
-  const { theme } = useTheme();
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]} />
+    <View style={styles.container}>
+      <AsteroidsGame />
+    </View>
   );
 }
 
