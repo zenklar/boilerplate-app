@@ -1,126 +1,213 @@
 import React from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, Platform,
+  View, Text, Image, StyleSheet, ScrollView,
+  TouchableOpacity, useWindowDimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
+import { GAME_LIST, GameEntry } from '../../constants/gameList';
 
-const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const COLS = 3;
+const TILE_GAP = 10;
+const H_PAD = 14;
 
-type Game = {
-  id: string;
-  title: string;
-  symbol: string;
-  color: string;
-  year: string;
-  genre: string;
-  route?: string;
-  available: boolean;
-};
+function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
+  const { theme } = useTheme();
+  const tileH = Math.round(tileW * 1.38);
 
-const GAMES: Game[] = [
-  { id: 'asteroids', title: 'ASTEROIDS', symbol: '◈', color: '#4FC3F7', year: '1979', genre: 'ARCADE', route: '/game/asteroids', available: true },
-  { id: 'invaders',  title: 'INVADERS',  symbol: '◉', color: '#69F0AE', year: '—',    genre: 'ARCADE', available: false },
-  { id: 'snake',     title: 'SNAKE',     symbol: '⬡', color: '#FFD54F', year: '—',    genre: 'PUZZLE', available: false },
-  { id: 'blocks',    title: 'BLOCKS',    symbol: '▦', color: '#FF8A65', year: '—',    genre: 'PUZZLE', available: false },
-];
-
-function GameCard({ game }: { game: Game }) {
   const handlePress = () => {
     if (game.available && game.route) router.push(game.route as any);
   };
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        s.card,
-        game.available && { borderColor: game.color + '55', borderWidth: 1.5 },
-        game.available && pressed && { opacity: 0.8 },
-      ]}
+    <TouchableOpacity
+      activeOpacity={game.available ? 0.75 : 1}
       onPress={handlePress}
-      disabled={!game.available}
+      style={[
+        st.tile,
+        { width: tileW, borderRadius: theme.radius.md, borderColor: theme.colors.cardBorder },
+        theme.mode === 'light' && {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 6,
+          elevation: 3,
+        },
+      ]}
     >
-      {/* Top accent bar */}
-      <View style={[s.cardAccent, { backgroundColor: game.available ? game.color : '#1A1A1A' }]} />
+      {/* Cover image */}
+      <Image
+        source={game.image}
+        style={[st.tileImage, { height: tileH, borderRadius: theme.radius.md }]}
+        resizeMode="cover"
+      />
 
-      <View style={s.cardBody}>
-        {/* Icon */}
-        <Text style={[s.cardSymbol, { color: game.available ? game.color : '#2A2A2A' }]}>
-          {game.symbol}
-        </Text>
+      {/* Accent colour strip along bottom of image */}
+      <View style={[st.accentStrip, { backgroundColor: game.accentColor, borderRadius: theme.radius.md }]} />
 
-        {/* Name */}
-        <Text style={[s.cardTitle, { fontFamily: MONO, color: game.available ? '#FFF' : '#333' }]}>
+      {/* SOON badge */}
+      {!game.available && (
+        <View style={[st.soonBadge, { backgroundColor: theme.colors.backgroundSecondary + 'EE' }]}>
+          <Text style={[st.soonTxt, { color: theme.colors.textMuted }]}>SOON</Text>
+        </View>
+      )}
+
+      {/* Play button overlay for available games */}
+      {game.available && (
+        <View style={[st.playOverlay, { borderColor: game.accentColor + '99' }]}>
+          <Ionicons name="play-circle" size={28} color={game.accentColor} />
+        </View>
+      )}
+
+      {/* Title below image */}
+      <View style={[st.tileLabel, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+        <Text
+          style={[st.tileTitle, { color: game.available ? theme.colors.text : theme.colors.textMuted }]}
+          numberOfLines={2}
+        >
           {game.title}
         </Text>
-
-        {/* Meta */}
-        <Text style={[s.cardMeta, { fontFamily: MONO }]}>
-          {game.available ? `${game.year} · ${game.genre}` : game.genre}
+        <Text style={[st.tileMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+          {game.year !== '—' ? game.year : game.genre}
         </Text>
-
-        {/* Coming soon badge */}
-        {!game.available && (
-          <View style={s.badge}>
-            <Text style={[s.badgeTxt, { fontFamily: MONO }]}>SOON</Text>
-          </View>
-        )}
-
-        {/* Play prompt for available games */}
-        {game.available && (
-          <View style={s.playPill}>
-            <Text style={[s.playPillTxt, { fontFamily: MONO, color: game.color }]}>▶ PLAY</Text>
-          </View>
-        )}
       </View>
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
 export default function HomeScreen() {
+  const { theme } = useTheme();
+  const { width: screenW } = useWindowDimensions();
+
+  const tileW = Math.floor((screenW - H_PAD * 2 - TILE_GAP * (COLS - 1)) / COLS);
+
   return (
-    <View style={s.root}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[s.heading, { fontFamily: MONO }]}>ARCADE</Text>
-        <View style={s.grid}>
-          {GAMES.map((g) => <GameCard key={g.id} game={g} />)}
+    <SafeAreaView style={[st.safe, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+      <ScrollView
+        contentContainerStyle={[st.scroll, { paddingBottom: theme.spacing.xxl }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header section */}
+        <LinearGradient
+          colors={theme.gradients.primary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={st.heroBanner}
+        >
+          <View style={st.heroContent}>
+            <Text style={st.heroLabel}>ARCADE</Text>
+            <Text style={st.heroTitle}>Game Library</Text>
+            <Text style={st.heroSub}>Classic games reimagined for mobile</Text>
+          </View>
+          <View style={st.heroIcon}>
+            <Ionicons name="game-controller" size={52} color="rgba(255,255,255,0.25)" />
+          </View>
+        </LinearGradient>
+
+        {/* Section header */}
+        <View style={st.sectionHeader}>
+          <Text style={[st.sectionTitle, { color: theme.colors.textMuted }]}>ALL GAMES</Text>
+          <View style={[st.sectionBadge, { backgroundColor: theme.colors.backgroundSecondary }]}>
+            <Text style={[st.sectionBadgeTxt, { color: theme.colors.textMuted }]}>
+              {GAME_LIST.filter(g => g.available).length} available
+            </Text>
+          </View>
+        </View>
+
+        {/* Grid */}
+        <View style={[st.grid, { paddingHorizontal: H_PAD, gap: TILE_GAP }]}>
+          {GAME_LIST.map((game) => (
+            <GameTile key={game.id} game={game} tileW={tileW} />
+          ))}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
-  scroll: { padding: 16, gap: 0 },
-  heading: {
-    color: '#222', fontSize: 11, letterSpacing: 6, fontWeight: '700',
-    marginBottom: 16, marginLeft: 2,
-  },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  card: {
-    width: '47.5%',
-    backgroundColor: '#080808',
-    borderWidth: 1, borderColor: '#1A1A1A',
-    borderRadius: 4,
+const st = StyleSheet.create({
+  safe: { flex: 1 },
+  scroll: { paddingTop: 0 },
+
+  heroBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
     overflow: 'hidden',
   },
-  cardAccent: { height: 3, width: '100%' },
-  cardBody: { padding: 16, gap: 6 },
-  cardSymbol: { fontSize: 36, lineHeight: 44 },
-  cardTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 3, color: '#FFF' },
-  cardMeta: { color: '#444', fontSize: 8, letterSpacing: 2 },
-  badge: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#111',
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 2,
+  heroContent: { flex: 1 },
+  heroLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4,
   },
-  badgeTxt: { color: '#333', fontSize: 7, letterSpacing: 2 },
-  playPill: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
+  heroTitle: {
+    color: '#FFF',
+    fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4,
   },
-  playPillTxt: { fontSize: 9, letterSpacing: 2, fontWeight: '700' },
+  heroSub: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12, fontWeight: '400',
+  },
+  heroIcon: { marginLeft: 12 },
+
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 18, marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 11, fontWeight: '600', letterSpacing: 0.5,
+  },
+  sectionBadge: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
+  },
+  sectionBadgeTxt: { fontSize: 11, fontWeight: '500' },
+
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+
+  tile: {
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    position: 'relative',
+  },
+  tileImage: {
+    width: '100%',
+  },
+  accentStrip: {
+    position: 'absolute',
+    bottom: 58,   // above the label area
+    left: 0, right: 0, height: 3,
+  },
+  soonBadge: {
+    position: 'absolute',
+    top: 8, right: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 6,
+  },
+  soonTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  playOverlay: {
+    position: 'absolute',
+    top: 8, right: 8,
+    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+
+  tileLabel: {
+    paddingHorizontal: 8, paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 1,
+  },
+  tileTitle: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  tileMeta: { fontSize: 9, fontWeight: '400' },
 });
