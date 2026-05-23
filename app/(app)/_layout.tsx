@@ -5,10 +5,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../theme';
 import AppHeader from '../../components/AppHeader';
 import BottomNav from '../../components/BottomNav';
+import { useGameUIStore } from '../../store/gameStore';
 
 export default function AppLayout() {
   const { session, loading } = useAuth();
   const { theme } = useTheme();
+  const isGamePlaying = useGameUIStore((s) => s.isGamePlaying);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -18,11 +20,11 @@ export default function AppLayout() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <AppHeader />
+      {!isGamePlaying && <AppHeader />}
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false }} />
       </View>
-      <BottomNav />
+      {!isGamePlaying && <BottomNav />}
     </View>
   );
 }

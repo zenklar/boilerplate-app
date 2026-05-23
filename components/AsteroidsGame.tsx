@@ -6,8 +6,10 @@ import {
   Pressable,
   LayoutChangeEvent,
   Platform,
+  PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGameUIStore } from '../store/gameStore';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const HIGH_SCORE_KEY = '@asteroids/high_score';
@@ -16,14 +18,18 @@ const SHIP_W = 20;
 const SHIP_H = 26;
 const BULLET_SPEED = 8;
 const BULLET_LIFETIME = 62;
-const THRUST = 0.13;
+const THRUST_PWR = 0.13;
 const FRICTION = 0.988;
 const MAX_SPD = 7;
 const ROT_SPD = 4.5;
 const FIRE_CD = 12;
 const SAFE_R = 130;
 const INVINCIBLE = 180;
-const CTRL_H = 130;
+// Mobile: controls overlay at bottom. Web: full canvas height.
+const CTRL_H = Platform.OS === 'web' ? 0 : 140;
+const JOY_MAX = 52;
+const JOY_THUMB_R = 24;
+const JOY_DEAD = JOY_MAX * 0.18;
 
 const RADII = { large: 44, medium: 26, small: 14 } as const;
 const SPEEDS: Record<string, [number, number]> = {
@@ -43,9 +49,7 @@ interface Asteroid {
   rot: number; rotSpeed: number;
   br: [number, number, number, number];
 }
-
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
-
 interface GS {
   phase: Phase;
   sx: number; sy: number; svx: number; svy: number;
@@ -66,21 +70,18 @@ const d2 = (ax: number, ay: number, bx: number, by: number) =>
 
 function mkAsteroid(
   W: number, H: number, size: Size,
-  ox?: number, oy?: number,
-  px?: number, py?: number,
+  ox?: number, oy?: number, px?: number, py?: number,
 ): Asteroid {
   const r = RADII[size];
   const [sMin, sMax] = SPEEDS[size];
   const spd = rand(sMin, sMax);
   const dir = rand(0, Math.PI * 2);
   let x: number, y: number;
-  if (px !== undefined) {
-    x = px; y = py!;
-  } else {
+  if (px !== undefined) { x = px; y = py!; }
+  else {
     let tries = 0;
-    do {
-      x = rand(r, W - r); y = rand(r, H - r); tries++;
-    } while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
+    do { x = rand(r, W - r); y = rand(r, H - r); tries++; }
+    while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
   }
   const br: [number, number, number, number] = [
     r * rand(0.55, 1.45), r * rand(0.55, 1.45),
@@ -98,78 +99,127 @@ function mkLevel(lvl: number, W: number, H: number, sx: number, sy: number): Ast
     mkAsteroid(W, H, 'large', sx, sy));
 }
 
-function mkGS(W: number, H: number): GS {
-  const cx = W / 2, cy = H / 2;
-  return {
-    phase: 'idle',
-    sx: cx, sy: cy, svx: 0, svy: 0, sAngle: 0, sInv: 0,
-    bullets: [],
-    asteroids: mkLevel(1, W, H, cx, cy),
-    score: 0, lives: 3, level: 1,
-  };
-}
-
-const MONO: string = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 /* ─── Component ──────────────────────────────────────────────────────── */
 export default function AsteroidsGame() {
   const [area, setArea] = useState({ w: 0, h: 0 });
-  const canvasH = Math.max(0, area.h - CTRL_H);
-
   const [, setTick] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [newHS, setNewHS] = useState(false);
-  const hsRef = useRef(0);
 
+  const hsRef = useRef(0);
   const gsRef = useRef<GS | null>(null);
+  // Game object bounds (game area height = canvas height - ctrl overlay height)
+  const dimRef = useRef({ w: 0, h: 0 });
   const ctrl = useRef({ left: false, right: false, thrust: false, fire: false, fireCD: 0 });
   const frame = useRef(0);
+  const pendingStart = useRef(false);
+  // Web mouse aim
+  const rootRef = useRef<View>(null);
+  const canvasOrigin = useRef({ x: 0, y: 0 });
+  const mousePos = useRef({ x: 0, y: 0 });
+  // Joystick state (mobile)
+  const joyActive = useRef(false);
+  const joyCtr = useRef({ x: 0, y: 0 });
+  const joyOff = useRef({ x: 0, y: 0 });
 
-  /* Load high score */
+  const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
+
+  /* ── Load high score ── */
   useEffect(() => {
-    AsyncStorage.getItem(HIGH_SCORE_KEY).then(v => {
+    AsyncStorage.getItem(HIGH_SCORE_KEY).then((v) => {
       const n = v ? parseInt(v, 10) : 0;
       hsRef.current = n;
       setHighScore(n);
     });
   }, []);
 
-  /* Init game state when canvas is ready */
+  /* ── Web keyboard + mouse controls ── */
   useEffect(() => {
-    if (area.w > 0 && canvasH > 0 && !gsRef.current) {
-      gsRef.current = mkGS(area.w, canvasH);
-      setTick(t => t + 1);
-    }
-  }, [area.w, canvasH]);
+    if (Platform.OS !== 'web') return;
 
-  /* Game loop */
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      switch (e.code) {
+        case 'Space': e.preventDefault(); ctrl.current.fire = true; break;
+        case 'ArrowLeft': case 'KeyA': ctrl.current.left = true; break;
+        case 'ArrowRight': case 'KeyD': ctrl.current.right = true; break;
+        case 'ArrowUp': case 'KeyW': ctrl.current.thrust = true; break;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      switch (e.code) {
+        case 'Space': ctrl.current.fire = false; break;
+        case 'ArrowLeft': case 'KeyA': ctrl.current.left = false; break;
+        case 'ArrowRight': case 'KeyD': ctrl.current.right = false; break;
+        case 'ArrowUp': case 'KeyW': ctrl.current.thrust = false; break;
+      }
+    };
+    const onMouseMove = (e: MouseEvent) => { mousePos.current = { x: e.clientX, y: e.clientY }; };
+    const onMouseDown = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = true; };
+    const onMouseUp = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = false; };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  /* ── Single long-running game loop ── */
   useEffect(() => {
-    if (!area.w || !canvasH) return;
-    const W = area.w, H = canvasH;
-
     const id = setInterval(() => {
+      const { w: W, h: H } = dimRef.current;
+      if (!W || !H) { setTick((t) => t + 1); return; }
+
       const g = gsRef.current;
-      if (!g || g.phase !== 'playing') { setTick(t => t + 1); return; }
+      if (!g || g.phase !== 'playing') { setTick((t) => t + 1); return; }
 
       frame.current++;
       const c = ctrl.current;
 
-      /* Rotate */
-      if (c.left) g.sAngle -= ROT_SPD;
-      if (c.right) g.sAngle += ROT_SPD;
+      /* Mouse aim on web (overrides arrow-key rotation if mouse moved recently) */
+      if (Platform.OS === 'web') {
+        const { x: mx, y: my } = mousePos.current;
+        const { x: ox, y: oy } = canvasOrigin.current;
+        const dx = mx - ox - g.sx;
+        const dy = my - oy - g.sy;
+        // Only apply mouse aim if mouse has moved away from ship
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+          g.sAngle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+        }
+        // Arrow keys still work on web for rotation (override mouse aim)
+        if (c.left) g.sAngle -= ROT_SPD;
+        if (c.right) g.sAngle += ROT_SPD;
+      } else {
+        if (c.left) g.sAngle -= ROT_SPD;
+        if (c.right) g.sAngle += ROT_SPD;
+      }
 
       /* Thrust */
       if (c.thrust) {
         const r = toR(g.sAngle - 90);
-        g.svx += Math.cos(r) * THRUST;
-        g.svy += Math.sin(r) * THRUST;
+        g.svx += Math.cos(r) * THRUST_PWR;
+        g.svy += Math.sin(r) * THRUST_PWR;
         const spd = Math.sqrt(g.svx ** 2 + g.svy ** 2);
-        if (spd > MAX_SPD) { g.svx = (g.svx / spd) * MAX_SPD; g.svy = (g.svy / spd) * MAX_SPD; }
+        if (spd > MAX_SPD) {
+          g.svx = (g.svx / spd) * MAX_SPD;
+          g.svy = (g.svy / spd) * MAX_SPD;
+        }
       }
 
       /* Friction & move */
       g.svx *= FRICTION; g.svy *= FRICTION;
-      g.sx = wrap(g.sx + g.svx, W); g.sy = wrap(g.sy + g.svy, H);
+      g.sx = wrap(g.sx + g.svx, W);
+      g.sy = wrap(g.sy + g.svy, H);
       if (g.sInv > 0) g.sInv--;
 
       /* Fire */
@@ -177,7 +227,8 @@ export default function AsteroidsGame() {
         const r = toR(g.sAngle - 90);
         const tip = SHIP_H / 2 + 5;
         g.bullets.push({
-          x: g.sx + Math.cos(r) * tip, y: g.sy + Math.sin(r) * tip,
+          x: g.sx + Math.cos(r) * tip,
+          y: g.sy + Math.sin(r) * tip,
           vx: Math.cos(r) * BULLET_SPEED + g.svx,
           vy: Math.sin(r) * BULLET_SPEED + g.svy,
           life: BULLET_LIFETIME,
@@ -188,13 +239,14 @@ export default function AsteroidsGame() {
 
       /* Bullets */
       g.bullets = g.bullets
-        .map(b => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
-        .filter(b => b.life > 0 && b.x > -10 && b.x < W + 10 && b.y > -10 && b.y < H + 10);
+        .map((b) => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
+        .filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
 
       /* Asteroids */
-      g.asteroids = g.asteroids.map(a => ({
+      g.asteroids = g.asteroids.map((a) => ({
         ...a,
-        x: wrap(a.x + a.vx, W), y: wrap(a.y + a.vy, H),
+        x: wrap(a.x + a.vx, W),
+        y: wrap(a.y + a.vy, H),
         rot: a.rot + a.rotSpeed,
       }));
 
@@ -218,7 +270,7 @@ export default function AsteroidsGame() {
           }
         }
       }
-      g.asteroids = [...g.asteroids.filter(a => !deadA.has(a.id)), ...born];
+      g.asteroids = [...g.asteroids.filter((a) => !deadA.has(a.id)), ...born];
       g.bullets = g.bullets.filter((_, i) => !deadB.has(i));
 
       /* Ship–asteroid collision */
@@ -252,15 +304,14 @@ export default function AsteroidsGame() {
         g.asteroids = mkLevel(g.level, W, H, g.sx, g.sy);
       }
 
-      setTick(t => t + 1);
+      setTick((t) => t + 1);
     }, TICK_MS);
 
     return () => clearInterval(id);
-  }, [area.w, canvasH]);
+  }, []); // single interval, always reads current refs
 
-  const startGame = () => {
-    const W = area.w, H = canvasH;
-    if (!W || !H) return;
+  /* ── Init or restart game with given dimensions ── */
+  const initNewGame = (W: number, H: number) => {
     setNewHS(false);
     gsRef.current = {
       phase: 'playing',
@@ -269,21 +320,111 @@ export default function AsteroidsGame() {
       asteroids: mkLevel(1, W, H, W / 2, H / 2),
       score: 0, lives: 3, level: 1,
     };
-    setTick(t => t + 1);
+    setTick((t) => t + 1);
   };
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    if (width !== area.w || height !== area.h) {
-      setArea({ w: width, h: height });
+  /* ── Start game ── */
+  const handleStartGame = () => {
+    const alreadyFullscreen = useGameUIStore.getState().isGamePlaying;
+    if (alreadyFullscreen) {
+      // Layout unchanged (play again from game-over): use current dims directly
+      const { w: W, h: H } = dimRef.current;
+      if (W > 0 && H > 0) initNewGame(W, H);
+    } else {
+      // Idle → playing: hiding header/nav changes layout, wait for onLayout
+      pendingStart.current = true;
+      setIsGamePlaying(true);
     }
   };
 
+  /* ── Back to menu ── */
+  const handleBackToMenu = () => {
+    setIsGamePlaying(false); // header/nav reappear, onLayout will fire
+    if (gsRef.current) gsRef.current.phase = 'idle';
+    // Reset fire state so buttons don't get stuck
+    ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
+    joyActive.current = false;
+    joyOff.current = { x: 0, y: 0 };
+    setNewHS(false);
+    setTick((t) => t + 1);
+  };
+
+  /* ── Layout handler ── */
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    const gameH = Math.max(1, height - CTRL_H);
+    dimRef.current = { w: width, h: gameH };
+    setArea({ w: width, h: height });
+
+    // Measure root position for web mouse-to-canvas coordinate conversion
+    if (Platform.OS === 'web' && rootRef.current) {
+      (rootRef.current as any).measureInWindow((x: number, y: number) => {
+        canvasOrigin.current = { x, y };
+      });
+    }
+
+    if (pendingStart.current && width > 0 && height > 0) {
+      pendingStart.current = false;
+      initNewGame(width, gameH);
+    } else if (!gsRef.current && width > 0 && height > 0) {
+      // First layout: build idle background
+      gsRef.current = {
+        phase: 'idle',
+        sx: width / 2, sy: gameH / 2, svx: 0, svy: 0, sAngle: 0, sInv: 0,
+        bullets: [],
+        asteroids: mkLevel(1, width, gameH, width / 2, gameH / 2),
+        score: 0, lives: 3, level: 1,
+      };
+      setTick((t) => t + 1);
+    } else if (gsRef.current?.phase === 'idle' && width > 0 && height > 0) {
+      // Returning to idle (after back-to-menu): refresh drifting asteroids
+      gsRef.current.asteroids = mkLevel(1, width, gameH, width / 2, gameH / 2);
+      gsRef.current.sx = width / 2;
+      gsRef.current.sy = gameH / 2;
+    }
+  };
+
+  /* ── Joystick PanResponder (mobile only) ── */
+  const joystickPR = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        joyCtr.current = { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY };
+        joyOff.current = { x: 0, y: 0 };
+        joyActive.current = true;
+      },
+      onPanResponderMove: (_, gs) => {
+        const dx = Math.max(-JOY_MAX, Math.min(JOY_MAX, gs.dx));
+        const dy = Math.max(-JOY_MAX, Math.min(JOY_MAX, gs.dy));
+        joyOff.current = { x: dx, y: dy };
+        ctrl.current.left = dx < -JOY_DEAD;
+        ctrl.current.right = dx > JOY_DEAD;
+        ctrl.current.thrust = dy < -JOY_DEAD;
+      },
+      onPanResponderRelease: () => {
+        joyOff.current = { x: 0, y: 0 };
+        joyActive.current = false;
+        ctrl.current.left = false;
+        ctrl.current.right = false;
+        ctrl.current.thrust = false;
+      },
+      onPanResponderTerminate: () => {
+        joyOff.current = { x: 0, y: 0 };
+        joyActive.current = false;
+        ctrl.current.left = false;
+        ctrl.current.right = false;
+        ctrl.current.thrust = false;
+      },
+    }),
+  ).current;
+
+  /* ── Render helpers ── */
   const g = gsRef.current;
-  const thrustOn = g?.phase === 'playing' && ctrl.current.thrust;
+  const isPlaying = g?.phase === 'playing';
+  const thrustOn = isPlaying && ctrl.current.thrust;
   const shipVisible = !g || g.sInv === 0 || frame.current % 6 < 3;
 
-  /* Thrust flame world position (opposite to thrust direction) */
   let flameX = 0, flameY = 0;
   if (g && thrustOn) {
     const fr = toR(g.sAngle + 90);
@@ -292,226 +433,267 @@ export default function AsteroidsGame() {
   }
 
   return (
-    <View style={s.root} onLayout={onLayout}>
-      {/* ── Canvas ── */}
-      {canvasH > 0 && (
-        <View style={[s.canvas, { height: canvasH }]}>
-          {/* Asteroids */}
-          {g?.asteroids.map(a => (
-            <View
-              key={a.id}
-              style={[s.asteroid, {
-                width: a.radius * 2,
-                height: a.radius * 2,
-                borderTopLeftRadius: a.br[0],
-                borderTopRightRadius: a.br[1],
-                borderBottomRightRadius: a.br[2],
-                borderBottomLeftRadius: a.br[3],
-                left: a.x - a.radius,
-                top: a.y - a.radius,
-                transform: [{ rotate: `${a.rot}deg` }],
-              }]}
-            />
-          ))}
+    <View ref={rootRef} style={s.root} onLayout={onLayout}>
+      {/* ── Game canvas (fills all space) ── */}
+      <View style={s.canvas}>
 
-          {/* Bullets */}
-          {g?.bullets.map((b, i) => (
-            <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
-          ))}
+        {/* Drifting asteroids */}
+        {g?.asteroids.map((a) => (
+          <View
+            key={a.id}
+            style={[s.asteroid, {
+              width: a.radius * 2, height: a.radius * 2,
+              borderTopLeftRadius: a.br[0], borderTopRightRadius: a.br[1],
+              borderBottomRightRadius: a.br[2], borderBottomLeftRadius: a.br[3],
+              left: a.x - a.radius, top: a.y - a.radius,
+              transform: [{ rotate: `${a.rot}deg` }],
+            }]}
+          />
+        ))}
 
-          {/* Thrust flame */}
-          {thrustOn && shipVisible && (
-            <View style={[s.flame, { left: flameX - 4, top: flameY - 5 }]} />
-          )}
+        {/* Bullets */}
+        {g?.bullets.map((b, i) => (
+          <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
+        ))}
 
-          {/* Ship */}
-          {g && g.phase !== 'idle' && shipVisible && (
-            <View style={[s.ship, {
-              left: g.sx - SHIP_W / 2,
-              top: g.sy - SHIP_H / 2,
-              transform: [{ rotate: `${g.sAngle}deg` }],
-            }]} />
-          )}
+        {/* Thrust flame */}
+        {thrustOn && shipVisible && (
+          <View style={[s.flame, { left: flameX - 4, top: flameY - 5 }]} />
+        )}
 
-          {/* HUD */}
-          {g && (
-            <>
-              <View style={s.hud}>
-                <Text style={[s.hudScore, { fontFamily: MONO }]}>
-                  {String(g.score).padStart(5, '0')}
-                </Text>
-                <Text style={[s.hudHi, { fontFamily: MONO }]}>
-                  HI  {String(highScore).padStart(5, '0')}
-                </Text>
-              </View>
+        {/* Ship */}
+        {g && g.phase !== 'idle' && shipVisible && (
+          <View style={[s.ship, {
+            left: g.sx - SHIP_W / 2,
+            top: g.sy - SHIP_H / 2,
+            transform: [{ rotate: `${g.sAngle}deg` }],
+          }]} />
+        )}
+
+        {/* ── HUD (score + high score + lives) ── */}
+        {g && (
+          <>
+            <View style={s.hud}>
+              <Text style={[s.hudScore, { fontFamily: MONO }]}>
+                {String(g.score).padStart(5, '0')}
+              </Text>
+              <Text style={[s.hudHi, { fontFamily: MONO }]}>
+                HI  {String(highScore).padStart(5, '0')}
+              </Text>
+            </View>
+            {isPlaying && (
               <View style={s.livesRow}>
                 {Array.from({ length: Math.max(0, g.lives) }).map((_, i) => (
                   <Text key={i} style={s.lifeIcon}>▲</Text>
                 ))}
               </View>
-              {g.phase === 'playing' && (
-                <Text style={[s.levelBadge, { fontFamily: MONO }]}>LV {g.level}</Text>
-              )}
-            </>
-          )}
+            )}
+            {isPlaying && (
+              <Text style={[s.levelBadge, { fontFamily: MONO }]}>LV {g.level}</Text>
+            )}
+          </>
+        )}
 
-          {/* Idle screen */}
-          {(!g || g.phase === 'idle') && (
-            <View style={s.overlay}>
-              <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
-              <Text style={[s.subtitleText, { fontFamily: MONO }]}>1979</Text>
-              {highScore > 0 && (
-                <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                  HIGH SCORE   {highScore}
+        {/* Web: keyboard/mouse hint */}
+        {Platform.OS === 'web' && isPlaying && (
+          <Text style={s.webHint}>
+            Mouse aim · LMB thrust · Space fire  ·  ← → ↑ keys
+          </Text>
+        )}
+
+        {/* ── Idle / title screen ── */}
+        {(!g || g.phase === 'idle') && (
+          <View style={s.overlay}>
+            <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
+            <Text style={[s.yearText, { fontFamily: MONO }]}>1979</Text>
+            {highScore > 0 && (
+              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+                HIGH SCORE   {highScore}
+              </Text>
+            )}
+            {Platform.OS === 'web' && (
+              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+                Mouse aim · LMB thrust · Space to fire
+              </Text>
+            )}
+            <Pressable onPress={handleStartGame} style={s.menuBtn}>
+              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>INSERT COIN</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Game over screen ── */}
+        {g?.phase === 'gameover' && (
+          <View style={s.overlay}>
+            <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
+            <Text style={[s.finalScore, { fontFamily: MONO }]}>{g.score}</Text>
+            {newHS && (
+              <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
+            )}
+            <View style={s.btnRow}>
+              <Pressable onPress={handleStartGame} style={s.menuBtn}>
+                <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>PLAY AGAIN</Text>
+              </Pressable>
+              <Pressable onPress={handleBackToMenu} style={[s.menuBtn, s.menuBtnGhost]}>
+                <Text style={[s.menuBtnTxt, s.menuBtnGhostTxt, { fontFamily: MONO }]}>
+                  MENU
                 </Text>
-              )}
-              <Pressable onPress={startGame} style={s.startBtn}>
-                <Text style={[s.startTxt, { fontFamily: MONO }]}>INSERT COIN</Text>
               </Pressable>
             </View>
-          )}
+          </View>
+        )}
 
-          {/* Game over screen */}
-          {g?.phase === 'gameover' && (
-            <View style={s.overlay}>
-              <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
-              <Text style={[s.finalScore, { fontFamily: MONO }]}>{g.score}</Text>
-              {newHS && (
-                <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
+        {/* ── Mobile controls (joystick + fire) ── */}
+        {Platform.OS !== 'web' && isPlaying && (
+          <View style={s.ctrlOverlay}>
+            {/* Floating joystick touch area */}
+            <View style={s.joyArea} {...joystickPR.panHandlers}>
+              {joyActive.current && (
+                <>
+                  {/* Base ring */}
+                  <View style={[s.joyBase, {
+                    left: joyCtr.current.x - JOY_MAX,
+                    top: joyCtr.current.y - JOY_MAX,
+                  }]} />
+                  {/* Thumb */}
+                  <View style={[s.joyThumb, {
+                    left: joyCtr.current.x + joyOff.current.x - JOY_THUMB_R,
+                    top: joyCtr.current.y + joyOff.current.y - JOY_THUMB_R,
+                  }]} />
+                </>
               )}
-              <Pressable onPress={startGame} style={s.startBtn}>
-                <Text style={[s.startTxt, { fontFamily: MONO }]}>PLAY AGAIN</Text>
-              </Pressable>
+              {/* Hint when not touching */}
+              {!joyActive.current && (
+                <View style={s.joyHint}>
+                  <View style={s.joyHintRing} />
+                </View>
+              )}
             </View>
-          )}
-        </View>
-      )}
 
-      {/* ── Controls ── */}
-      <View style={s.controls}>
-        <View style={s.ctrlGroup}>
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [s.ctrlBtn, pressed && s.ctrlBtnPressed]}
-            onPressIn={() => { ctrl.current.left = true; }}
-            onPressOut={() => { ctrl.current.left = false; }}
-          >
-            <Text style={s.ctrlTxt}>◀</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [s.ctrlBtn, pressed && s.ctrlBtnPressed]}
-            onPressIn={() => { ctrl.current.right = true; }}
-            onPressOut={() => { ctrl.current.right = false; }}
-          >
-            <Text style={s.ctrlTxt}>▶</Text>
-          </Pressable>
-        </View>
-        <View style={s.ctrlGroup}>
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [s.ctrlBtn, s.thrustBtn, pressed && s.ctrlBtnPressed]}
-            onPressIn={() => { ctrl.current.thrust = true; }}
-            onPressOut={() => { ctrl.current.thrust = false; }}
-          >
-            <Text style={s.ctrlTxt}>▲</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [s.ctrlBtn, s.fireBtn, pressed && s.ctrlBtnPressed]}
-            onPressIn={() => { ctrl.current.fire = true; }}
-            onPressOut={() => { ctrl.current.fire = false; }}
-          >
-            <Text style={[s.ctrlTxt, s.fireTxt]}>FIRE</Text>
-          </Pressable>
-        </View>
+            {/* Fire button */}
+            <Pressable
+              style={({ pressed }: { pressed: boolean }) => [
+                s.fireBtn,
+                pressed && s.fireBtnActive,
+              ]}
+              onPressIn={() => { ctrl.current.fire = true; }}
+              onPressOut={() => { ctrl.current.fire = false; }}
+            >
+              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
+/* ─── Styles ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  canvas: { width: '100%', overflow: 'hidden' },
+  canvas: { flex: 1, overflow: 'hidden' },
 
   asteroid: {
     position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#FFF',
-    backgroundColor: 'transparent',
+    borderWidth: 2, borderColor: '#FFF', backgroundColor: 'transparent',
   },
   bullet: {
-    position: 'absolute',
-    width: 5, height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#FFF',
+    position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
   },
   ship: {
     position: 'absolute',
     width: 0, height: 0,
-    borderLeftWidth: SHIP_W / 2,
-    borderRightWidth: SHIP_W / 2,
-    borderBottomWidth: SHIP_H,
+    borderLeftWidth: SHIP_W / 2, borderRightWidth: SHIP_W / 2, borderBottomWidth: SHIP_H,
     borderStyle: 'solid',
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: '#FFF',
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFF',
     backgroundColor: 'transparent',
   },
   flame: {
-    position: 'absolute',
-    width: 8, height: 10,
-    borderRadius: 4,
-    backgroundColor: '#FF6600',
-    opacity: 0.85,
+    position: 'absolute', width: 8, height: 10, borderRadius: 4,
+    backgroundColor: '#FF6600', opacity: 0.9,
   },
 
   hud: {
-    position: 'absolute', top: 12, left: 14, right: 14,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    position: 'absolute', top: 14, left: 14, right: 14,
+    flexDirection: 'row', justifyContent: 'space-between',
   },
   hudScore: { color: '#FFF', fontSize: 20, fontWeight: '700' },
-  hudHi: { color: '#888', fontSize: 13 },
+  hudHi: { color: '#555', fontSize: 13 },
   livesRow: {
-    position: 'absolute', top: 40, left: 14,
+    position: 'absolute', top: 44, left: 14,
     flexDirection: 'row', gap: 5,
   },
   lifeIcon: { color: '#FFF', fontSize: 13 },
   levelBadge: {
-    position: 'absolute', bottom: 6, right: 14,
-    color: '#555', fontSize: 12,
+    position: 'absolute',
+    bottom: CTRL_H + 10,
+    right: 14,
+    color: '#444', fontSize: 12,
   },
+
+  webHint: {
+    position: 'absolute', bottom: 10, left: 0, right: 0,
+    color: '#2A2A2A', fontSize: 11, textAlign: 'center',
+  },
+  webIdleHint: { color: '#555', fontSize: 12, letterSpacing: 1 },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center', alignItems: 'center', gap: 14,
   },
-  titleText: {
-    color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8,
-  },
-  subtitleText: { color: '#555', fontSize: 14, letterSpacing: 2 },
-  hiLabel: { color: '#FFD700', fontSize: 13, letterSpacing: 1 },
-  finalScore: { color: '#FFF', fontSize: 40, fontWeight: '700', letterSpacing: 4 },
+  titleText: { color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8 },
+  yearText: { color: '#444', fontSize: 14, letterSpacing: 2 },
+  hiLabel: { color: '#FFD700', fontSize: 14, letterSpacing: 1 },
+  finalScore: { color: '#FFF', fontSize: 44, fontWeight: '700', letterSpacing: 4 },
   newHsText: { color: '#FFD700', fontSize: 16, fontWeight: '700', letterSpacing: 2 },
-  startBtn: {
-    marginTop: 10,
-    borderWidth: 1.5, borderColor: '#FFF',
-    paddingHorizontal: 28, paddingVertical: 11,
-  },
-  startTxt: { color: '#FFF', fontSize: 15, letterSpacing: 4 },
 
-  controls: {
-    height: CTRL_H,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 28, paddingBottom: 12,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1A1A1A',
+  btnRow: { flexDirection: 'row', gap: 14, marginTop: 6 },
+  menuBtn: {
+    borderWidth: 1.5, borderColor: '#FFF',
+    paddingHorizontal: 24, paddingVertical: 12,
   },
-  ctrlGroup: { flexDirection: 'row', gap: 14 },
-  ctrlBtn: {
-    width: 62, height: 62, borderRadius: 31,
-    borderWidth: 1.5, borderColor: '#333',
-    backgroundColor: '#0D0D0D',
+  menuBtnTxt: { color: '#FFF', fontSize: 13, letterSpacing: 4 },
+  menuBtnGhost: { borderColor: '#444' },
+  menuBtnGhostTxt: { color: '#666' },
+
+  /* Controls overlay */
+  ctrlOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    height: CTRL_H,
+    flexDirection: 'row', alignItems: 'center',
+  },
+
+  /* Joystick */
+  joyArea: { flex: 1, height: CTRL_H },
+  joyBase: {
+    position: 'absolute',
+    width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
+    borderWidth: 1.5, borderColor: '#2A2A2A',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  joyThumb: {
+    position: 'absolute',
+    width: JOY_THUMB_R * 2, height: JOY_THUMB_R * 2, borderRadius: JOY_THUMB_R,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  joyHint: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  joyHintRing: {
+    width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
+    borderWidth: 1, borderColor: '#1A1A1A',
+  },
+
+  /* Fire button */
+  fireBtn: {
+    width: 90, height: 90, borderRadius: 45,
+    marginRight: 30, marginBottom: 4,
+    borderWidth: 2, borderColor: '#8B0000',
+    backgroundColor: 'rgba(139,0,0,0.2)',
     justifyContent: 'center', alignItems: 'center',
   },
-  ctrlBtnPressed: { backgroundColor: '#1E1E1E', borderColor: '#555' },
-  thrustBtn: { borderColor: '#444' },
-  fireBtn: { borderColor: '#C0392B', backgroundColor: '#160000' },
-  ctrlTxt: { color: '#DDD', fontSize: 22, fontWeight: '600' },
-  fireTxt: { fontSize: 13, letterSpacing: 1 },
+  fireBtnActive: {
+    backgroundColor: 'rgba(220,0,0,0.5)',
+    borderColor: '#FF3333',
+  },
+  fireBtnTxt: { color: '#FFF', fontSize: 13, fontWeight: '700', letterSpacing: 2 },
 });
