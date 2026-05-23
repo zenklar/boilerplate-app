@@ -70,51 +70,12 @@ function ArcadeCoin({ size = 48 }: { size?: number }) {
   );
 }
 
-/* ── Coin pile — different sizes for different packs ────────────────── */
-function CoinPile({ count, size }: { count: 'sm' | 'md' | 'lg'; size: number }) {
-  const coinSize = size;
-  const configs = {
-    sm: [{ x: 0, y: 0 }],
-    md: [{ x: -coinSize * 0.28, y: coinSize * 0.18 }, { x: coinSize * 0.28, y: coinSize * 0.18 }, { x: 0, y: 0 }],
-    lg: [
-      { x: -coinSize * 0.42, y: coinSize * 0.32 },
-      { x: coinSize * 0.42, y: coinSize * 0.32 },
-      { x: -coinSize * 0.18, y: coinSize * 0.16 },
-      { x: coinSize * 0.18, y: coinSize * 0.16 },
-      { x: 0, y: 0 },
-    ],
-  };
-  const positions = configs[count];
-  const containerW = coinSize * (count === 'lg' ? 1.9 : count === 'md' ? 1.6 : 1.1);
-  const containerH = coinSize * (count === 'lg' ? 1.5 : count === 'md' ? 1.25 : 1.1);
-  const cx = containerW / 2 - coinSize / 2;
-  const cy = containerH / 2 - coinSize / 2;
-
-  return (
-    <View style={{ width: containerW, height: containerH }}>
-      {positions.map((pos, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            top: cy + pos.y,
-            left: cx + pos.x,
-          }}
-        >
-          <ArcadeCoin size={coinSize} />
-        </View>
-      ))}
-    </View>
-  );
-}
-
 /* ── Pack data ──────────────────────────────────────────────────────── */
 type Pack = {
   id: string;
   label: string;
   subtitle: string;
   coins: number;
-  pileSize: 'sm' | 'md' | 'lg';
   tag?: string;
   tagColor?: string;
 };
@@ -125,14 +86,12 @@ const PACKS: Pack[] = [
     label: 'Starter',
     subtitle: '10 plays',
     coins: 10,
-    pileSize: 'sm',
   },
   {
     id: 'popular',
     label: 'Popular',
     subtitle: '100 plays',
     coins: 100,
-    pileSize: 'md',
     tag: 'MOST POPULAR',
     tagColor: '#0A84FF',
   },
@@ -141,7 +100,6 @@ const PACKS: Pack[] = [
     label: 'Mega Pack',
     subtitle: '1000 plays',
     coins: 1000,
-    pileSize: 'lg',
     tag: 'BEST VALUE',
     tagColor: '#32D74B',
   },
@@ -235,11 +193,6 @@ export default function ShopScreen() {
               )}
 
               <View style={st.packInner}>
-                {/* Coin pile */}
-                <View style={st.pileWrap}>
-                  <CoinPile count={pack.pileSize} size={46} />
-                </View>
-
                 {/* Info */}
                 <View style={st.packInfo}>
                   <Text style={[st.packLabel, { color: theme.colors.text }]}>
@@ -350,12 +303,6 @@ const st = StyleSheet.create({
     padding: 16,
     gap: 14,
   },
-  pileWrap: {
-    width: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   packInfo: { flex: 1, gap: 3 },
   packLabel: { fontSize: 17, fontWeight: '700' },
   packCoinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
