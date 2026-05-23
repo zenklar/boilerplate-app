@@ -31,6 +31,10 @@ const JOY_MAX = 52;
 const JOY_THUMB_R = 24;
 const JOY_DEAD = JOY_MAX * 0.18;
 
+const PARTICLE_MAX_LIFE = 28;
+const PARTICLE_SPAWN = 3;   // particles per thrust frame
+const PARTICLE_SPREAD = 0.8; // radians of cone spread at exhaust
+
 const RADII = { large: 44, medium: 26, small: 14 } as const;
 const SPEEDS: Record<string, [number, number]> = {
   large: [0.5, 1.4],
@@ -50,12 +54,17 @@ interface Asteroid {
   br: [number, number, number, number];
 }
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
+interface Particle {
+  id: number; x: number; y: number; vx: number; vy: number;
+  life: number; maxLife: number; size: number;
+}
 interface GS {
   phase: Phase;
   sx: number; sy: number; svx: number; svy: number;
   sAngle: number; sInv: number;
   bullets: Bullet[];
   asteroids: Asteroid[];
+  particles: Particle[];
   score: number; lives: number; level: number;
 }
 
@@ -220,7 +229,7 @@ export default function AsteroidsGame() {
         if (c.right) g.sAngle += ROT_SPD;
       }
 
-      /* Thrust */
+      /* Thrust + particle spawn */
       if (c.thrust) {
         const r = toR(g.sAngle - 90);
         g.svx += Math.cos(r) * THRUST_PWR;
@@ -229,6 +238,23 @@ export default function AsteroidsGame() {
         if (spd > MAX_SPD) {
           g.svx = (g.svx / spd) * MAX_SPD;
           g.svy = (g.svy / spd) * MAX_SPD;
+        }
+        // Emit exhaust particles from the rear of the ship
+        const exhaustR = toR(g.sAngle + 90);
+        const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
+        const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
+        for (let i = 0; i < PARTICLE_SPAWN; i++) {
+          const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
+          const pDir = exhaustR + spread;
+          const pSpd = rand(1.2, 2.8);
+          g.particles.push({
+            id: uid(),
+            x: ex + rand(-3, 3), y: ey + rand(-3, 3),
+            vx: Math.cos(pDir) * pSpd + g.svx * 0.3,
+            vy: Math.sin(pDir) * pSpd + g.svy * 0.3,
+            life: PARTICLE_MAX_LIFE, maxLife: PARTICLE_MAX_LIFE,
+            size: rand(3, 6),
+          });
         }
       }
 
@@ -257,6 +283,11 @@ export default function AsteroidsGame() {
       g.bullets = g.bullets
         .map((b) => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
         .filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+
+      /* Particles */
+      g.particles = g.particles
+        .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.94 }))
+        .filter((p) => p.life > 0);
 
       /* Asteroids */
       g.asteroids = g.asteroids.map((a) => ({
@@ -326,7 +357,7 @@ export default function AsteroidsGame() {
     gsRef.current = {
       phase: 'playing',
       sx: W / 2, sy: H / 2, svx: 0, svy: 0, sAngle: 0, sInv: INVINCIBLE,
-      bullets: [],
+      bullets: [], particles: [],
       asteroids: mkLevel(1, W, H, W / 2, H / 2),
       score: 0, lives: 3, level: 1,
     };
@@ -381,7 +412,7 @@ export default function AsteroidsGame() {
       gsRef.current = {
         phase: 'idle',
         sx: width / 2, sy: gameH / 2, svx: 0, svy: 0, sAngle: 0, sInv: 0,
-        bullets: [],
+        bullets: [], particles: [],
         asteroids: mkLevel(1, width, gameH, width / 2, gameH / 2),
         score: 0, lives: 3, level: 1,
       };
@@ -432,15 +463,7 @@ export default function AsteroidsGame() {
   /* ── Render helpers ── */
   const g = gsRef.current;
   const isPlaying = g?.phase === 'playing';
-  const thrustOn = isPlaying && ctrl.current.thrust;
   const shipVisible = !g || g.sInv === 0 || frame.current % 6 < 3;
-
-  let flameX = 0, flameY = 0;
-  if (g && thrustOn) {
-    const fr = toR(g.sAngle + 90);
-    flameX = g.sx + Math.cos(fr) * (SHIP_SIZE / 2 + 2);
-    flameY = g.sy + Math.sin(fr) * (SHIP_SIZE / 2 + 2);
-  }
 
   return (
     <View ref={rootRef} style={s.root} onLayout={onLayout}>
@@ -466,12 +489,30 @@ export default function AsteroidsGame() {
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
-        {/* Thrust flame */}
-        {thrustOn && shipVisible && (
-          <View style={[s.flame, { left: flameX - 4, top: flameY - 5 }]} />
-        )}
+        {/* Thruster particles — rendered behind ship */}
+        {g?.phase === 'playing' && g.particles.map((p) => {
+          const t = p.life / p.maxLife; // 1→0
+          // Colour shifts hot-white → orange → red as particle cools
+          const r = 255;
+          const gr = Math.round(t > 0.5 ? 255 : t * 2 * 200);
+          const bl = Math.round(t > 0.7 ? 255 * ((t - 0.7) / 0.3) : 0);
+          return (
+            <View
+              key={p.id}
+              style={{
+                position: 'absolute',
+                width: p.size, height: p.size,
+                borderRadius: p.size / 2,
+                backgroundColor: `rgb(${r},${gr},${bl})`,
+                opacity: t * 0.85,
+                left: p.x - p.size / 2,
+                top: p.y - p.size / 2,
+              }}
+            />
+          );
+        })}
 
-        {/* Ship — only during active play */}
+        {/* Ship — rendered on top of particles */}
         {g && g.phase === 'playing' && shipVisible && (
           <View style={{
             position: 'absolute',
@@ -612,10 +653,6 @@ const s = StyleSheet.create({
   },
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
-  },
-  flame: {
-    position: 'absolute', width: 8, height: 10, borderRadius: 4,
-    backgroundColor: '#FF6600', opacity: 0.9,
   },
 
   hud: {
