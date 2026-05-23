@@ -805,7 +805,7 @@ export default function AsteroidsGame() {
                 { transform: [{ scale: cdScale }], opacity: cdOpacity },
               ]}
             >
-              {countNum === 0 ? 'GO!' : String(countNum)}
+              {countNum === 0 ? 'START' : String(countNum)}
             </Animated.Text>
           </View>
         )}
