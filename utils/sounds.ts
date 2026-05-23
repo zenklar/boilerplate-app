@@ -126,7 +126,77 @@ export function playCountdownGo(): void {
   });
 }
 
-/** Punchy noise-burst explosion with optional sub-bass tone for large/medium */
+/** Sharp descending wail when the ship takes a hit but survives */
+export function playShipHit(): void {
+  const a = ac(); if (!a) return;
+
+  // Sawtooth sweep: 880 → 110 Hz over 0.4 s
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(880, a.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(110, a.currentTime + 0.38);
+  gain.gain.setValueAtTime(0.48, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.38);
+  osc.start(a.currentTime);
+  osc.stop(a.currentTime + 0.40);
+
+  // Short high noise burst
+  const bufLen = Math.round(a.sampleRate * 0.10);
+  const buf = a.createBuffer(1, bufLen, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 0.7);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const nfilt = a.createBiquadFilter();
+  nfilt.type = 'bandpass'; nfilt.frequency.value = 1400; nfilt.Q.value = 0.6;
+  const ng = a.createGain(); ng.gain.value = 0.55;
+  src.connect(nfilt); nfilt.connect(ng); ng.connect(comp());
+  src.start();
+}
+
+/** Dramatic destruction sound — layered noise burst + deep descending wail */
+export function playShipDestroyed(): void {
+  const a = ac(); if (!a) return;
+
+  // Noise explosion — same approach as large asteroid but bigger
+  const dur = 1.1;
+  const bufLen = Math.round(a.sampleRate * dur);
+  const buf = a.createBuffer(1, bufLen, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 0.85);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const filt = a.createBiquadFilter();
+  filt.type = 'lowpass'; filt.frequency.value = 800; filt.Q.value = 0.3;
+  const gain = a.createGain(); gain.gain.value = 1.8;
+  src.connect(filt); filt.connect(gain); gain.connect(comp());
+  src.start();
+
+  // Sub-bass pitch drop: 140 → 18 Hz (the "ship dying" tone)
+  const osc1 = a.createOscillator();
+  const og1 = a.createGain();
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(140, a.currentTime);
+  osc1.frequency.exponentialRampToValueAtTime(18, a.currentTime + dur * 0.7);
+  og1.gain.setValueAtTime(1.2, a.currentTime);
+  og1.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur * 0.65);
+  osc1.connect(og1); og1.connect(comp());
+  osc1.start(); osc1.stop(a.currentTime + dur);
+
+  // High sawtooth wail 600 → 80 Hz — gives it the "dying spaceship" character
+  const osc2 = a.createOscillator();
+  const og2 = a.createGain();
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(600, a.currentTime + 0.06);
+  osc2.frequency.exponentialRampToValueAtTime(80, a.currentTime + 0.85);
+  og2.gain.setValueAtTime(0.4, a.currentTime + 0.06);
+  og2.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.85);
+  osc2.connect(og2); og2.connect(comp());
+  osc2.start(a.currentTime + 0.06); osc2.stop(a.currentTime + 0.86);
+}
+
 export function playExplosion(size: 'small' | 'medium' | 'large'): void {
   const a = ac(); if (!a) return;
   const dur  = size === 'large' ? 0.85 : size === 'medium' ? 0.48 : 0.24;

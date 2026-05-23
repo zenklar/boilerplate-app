@@ -16,7 +16,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
-import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo } from '../utils/sounds';
+import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const TICK_MS = 16;
@@ -49,7 +49,7 @@ const SPEEDS: Record<string, [number, number]> = {
 const SCORE_MAP: Record<string, number> = { large: 20, medium: 50, small: 100 };
 
 type Size = 'large' | 'medium' | 'small';
-type Phase = 'idle' | 'playing' | 'gameover';
+type Phase = 'idle' | 'intro' | 'playing' | 'gameover';
 
 interface Asteroid {
   id: number;
@@ -261,6 +261,43 @@ export default function AsteroidsGame() {
       if (!W || !H) { setTick((t) => t + 1); return; }
 
       const g = gsRef.current;
+
+      /* ── Intro: ship flies in from below, no asteroids yet ── */
+      if (g?.phase === 'intro') {
+        g.sy += g.svy;
+        g.sx = wrap(g.sx + g.svx, W);
+        // Thrust particles while flying up
+        const exhaustAngle = toR(g.sAngle + 90);
+        const ex = g.sx + Math.cos(exhaustAngle) * (SHIP_SIZE / 2);
+        const ey = g.sy + Math.sin(exhaustAngle) * (SHIP_SIZE / 2);
+        for (let i = 0; i < PARTICLE_SPAWN + 1; i++) {
+          const spread = rand(-PARTICLE_SPREAD, PARTICLE_SPREAD);
+          const pDir = exhaustAngle + spread;
+          const pSpd = rand(1.4, 3.2);
+          g.particles.push({
+            id: uid(), x: ex + rand(-3, 3), y: ey + rand(-3, 3),
+            vx: Math.cos(pDir) * pSpd, vy: Math.sin(pDir) * pSpd,
+            life: 22, maxLife: 22, size: rand(2, 4.5), kind: 'thrust',
+          });
+        }
+        g.particles = g.particles
+          .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.92 }))
+          .filter((p) => p.life > 0);
+        // Reached center — hand off to playing
+        if (g.sy <= H / 2) {
+          g.sy = H / 2; g.svx = 0; g.svy = 0;
+          g.sInv = INVINCIBLE;
+          g.phase = 'playing';
+          g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
+          g.startTime = Date.now();
+          if (Platform.OS === 'web' && thrustSoundRef.current) {
+            thrustSoundRef.current.stop(); thrustSoundRef.current = null;
+          }
+        }
+        setTick((t) => t + 1);
+        return;
+      }
+
       if (!g || g.phase !== 'playing') { setTick((t) => t + 1); return; }
 
       frame.current++;
@@ -410,6 +447,7 @@ export default function AsteroidsGame() {
                 thrustSoundRef.current.stop();
                 thrustSoundRef.current = null;
               }
+              if (Platform.OS === 'web') playShipDestroyed();
               g.phase = 'gameover';
               setNewHS(g.score > useGameUIStore.getState().highScore);
               updateHighScore(g.score);
@@ -422,6 +460,7 @@ export default function AsteroidsGame() {
                 date: Date.now(),
               });
             } else {
+              if (Platform.OS === 'web') playShipHit();
               g.sx = W / 2; g.sy = H / 2;
               g.svx = 0; g.svy = 0; g.sAngle = 0;
               g.sInv = INVINCIBLE;
@@ -446,11 +485,16 @@ export default function AsteroidsGame() {
   /* ── Init or restart game with given dimensions ── */
   const initNewGame = (W: number, H: number) => {
     setNewHS(false);
+    // Start thrust sound for intro fly-in
+    if (Platform.OS === 'web' && !thrustSoundRef.current) {
+      thrustSoundRef.current = playThrustStart();
+    }
     gsRef.current = {
-      phase: 'playing',
-      sx: W / 2, sy: H / 2, svx: 0, svy: 0, sAngle: 0, sInv: INVINCIBLE,
-      bullets: [], particles: [],
-      asteroids: mkLevel(1, W, H, W / 2, H / 2),
+      phase: 'intro',
+      sx: W / 2, sy: H + SHIP_SIZE * 2,  // starts below visible area
+      svx: 0, svy: -5,                    // flies upward
+      sAngle: 0, sInv: 0,
+      bullets: [], particles: [], asteroids: [],
       score: 0, lives: 3, level: 1,
       bulletsShot: 0, asteroidsDestroyed: 0, startTime: Date.now(),
     };
@@ -579,6 +623,7 @@ export default function AsteroidsGame() {
         sx: width / 2, sy: gameH / 2, svx: 0, svy: 0, sAngle: 0, sInv: 0,
         bullets: [], particles: [], asteroids: [],
         score: 0, lives: 3, level: 1,
+        bulletsShot: 0, asteroidsDestroyed: 0, startTime: 0,
       };
       setTick((t) => t + 1);
     }
@@ -676,7 +721,7 @@ export default function AsteroidsGame() {
         ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
-        {g?.phase === 'playing' && g.particles.map((p) => {
+        {(g?.phase === 'playing' || g?.phase === 'intro') && g.particles.map((p) => {
           const t = p.life / p.maxLife;
           let rgb: string;
           let opacity: number;
@@ -709,7 +754,7 @@ export default function AsteroidsGame() {
         })}
 
         {/* Ship — rendered on top of particles */}
-        {g && g.phase === 'playing' && shipVisible && (
+        {g && (g.phase === 'playing' || g.phase === 'intro') && (g.phase === 'intro' || shipVisible) && (
           <View style={{
             position: 'absolute',
             left: g.sx - SHIP_SIZE / 2,
