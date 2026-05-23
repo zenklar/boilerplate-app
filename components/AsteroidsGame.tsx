@@ -68,6 +68,9 @@ interface GS {
   asteroids: Asteroid[];
   particles: Particle[];
   score: number; lives: number; level: number;
+  bulletsShot: number;
+  asteroidsDestroyed: number;
+  startTime: number;
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
@@ -146,6 +149,8 @@ export default function AsteroidsGame() {
   const highScore = useGameUIStore((s) => s.highScore);
   const updateHighScore = useGameUIStore((s) => s.updateHighScore);
   const loadHighScore = useGameUIStore((s) => s.loadHighScore);
+  const addRun = useGameUIStore((s) => s.addRun);
+  const loadRuns = useGameUIStore((s) => s.loadRuns);
   const selectedShipId = useShipStore((s) => s.selectedShipId);
   const loadSelectedShip = useShipStore((s) => s.loadSelectedShip);
   const selectedShip = SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0];
@@ -172,6 +177,7 @@ export default function AsteroidsGame() {
   useEffect(() => {
     loadHighScore();
     loadSelectedShip();
+    loadRuns();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -311,6 +317,7 @@ export default function AsteroidsGame() {
           life: BULLET_LIFETIME,
         });
         c.fireCD = FIRE_CD;
+        g.bulletsShot++;
         if (Platform.OS === 'web') playShoot();
       }
       if (c.fireCD > 0) c.fireCD--;
@@ -343,6 +350,7 @@ export default function AsteroidsGame() {
           if (d2(b.x, b.y, a.x, a.y) < a.radius ** 2) {
             deadA.add(a.id); deadB.add(bi);
             g.score += SCORE_MAP[a.size];
+            g.asteroidsDestroyed++;
             // Debris burst — more particles, bigger, faster, longer-lived
             const numDebris = a.size === 'large' ? 22 : a.size === 'medium' ? 14 : 8;
             const maxSpd = a.size === 'large' ? 5.5 : a.size === 'medium' ? 4.0 : 3.0;
@@ -384,6 +392,14 @@ export default function AsteroidsGame() {
               g.phase = 'gameover';
               setNewHS(g.score > useGameUIStore.getState().highScore);
               updateHighScore(g.score);
+              useGameUIStore.getState().addRun({
+                id: String(Date.now()),
+                score: g.score,
+                bulletsShot: g.bulletsShot,
+                asteroidsDestroyed: g.asteroidsDestroyed,
+                durationMs: Date.now() - g.startTime,
+                date: Date.now(),
+              });
             } else {
               g.sx = W / 2; g.sy = H / 2;
               g.svx = 0; g.svy = 0; g.sAngle = 0;
@@ -415,6 +431,7 @@ export default function AsteroidsGame() {
       bullets: [], particles: [],
       asteroids: mkLevel(1, W, H, W / 2, H / 2),
       score: 0, lives: 3, level: 1,
+      bulletsShot: 0, asteroidsDestroyed: 0, startTime: Date.now(),
     };
     setTick((t) => t + 1);
   };
@@ -623,9 +640,6 @@ export default function AsteroidsGame() {
             <View style={s.hud}>
               <Text style={[s.hudScore, { fontFamily: MONO }]}>
                 {String(g.score).padStart(5, '0')}
-              </Text>
-              <Text style={[s.hudHi, { fontFamily: MONO }]}>
-                HI  {String(highScore).padStart(5, '0')}
               </Text>
             </View>
             {isPlaying && (

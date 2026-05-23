@@ -56,14 +56,6 @@ export default function ShipSelectScreen({ onClose }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { fontFamily: MONO }]}>SELECT SHIP</Text>
-        <Text style={[styles.hiScore, { fontFamily: MONO }]}>
-          HI  {String(highScore).padStart(6, '0')}
-        </Text>
-      </View>
-
       {/* ── Detail panel ── */}
       <View style={styles.detailPanel}>
         <ShipPreview ship={previewShip} size={130} opacity={previewLocked ? 0.35 : 1} />
@@ -170,19 +162,7 @@ export default function ShipSelectScreen({ onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000', paddingTop: 8 },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
-  },
-  title: { color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 6 },
-  hiScore: { color: '#555', fontSize: 12, letterSpacing: 2 },
+  root: { flex: 1, backgroundColor: '#000' },
 
   detailPanel: {
     flexDirection: 'row',
