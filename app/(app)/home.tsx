@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { GAME_LIST, GameEntry } from '../../constants/gameList';
 
@@ -44,20 +43,10 @@ function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
         resizeMode="cover"
       />
 
-      {/* Accent colour strip along bottom of image */}
-      <View style={[st.accentStrip, { backgroundColor: game.accentColor, borderRadius: theme.radius.md }]} />
-
       {/* SOON badge */}
       {!game.available && (
         <View style={[st.soonBadge, { backgroundColor: theme.colors.backgroundSecondary + 'EE' }]}>
           <Text style={[st.soonTxt, { color: theme.colors.textMuted }]}>SOON</Text>
-        </View>
-      )}
-
-      {/* Play button overlay for available games */}
-      {game.available && (
-        <View style={[st.playOverlay, { borderColor: game.accentColor + '99' }]}>
-          <Ionicons name="play-circle" size={28} color={game.accentColor} />
         </View>
       )}
 
@@ -99,7 +88,7 @@ export default function HomeScreen() {
 
 const st = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { paddingTop: 0 },
+  scroll: { paddingTop: 16 },
 
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -126,11 +115,6 @@ const st = StyleSheet.create({
   tileImage: {
     width: '100%',
   },
-  accentStrip: {
-    position: 'absolute',
-    bottom: 58,   // above the label area
-    left: 0, right: 0, height: 3,
-  },
   soonBadge: {
     position: 'absolute',
     top: 8, right: 8,
@@ -138,14 +122,6 @@ const st = StyleSheet.create({
     borderRadius: 6,
   },
   soonTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  playOverlay: {
-    position: 'absolute',
-    top: 8, right: 8,
-    borderWidth: 1.5,
-    borderRadius: 20,
-    padding: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
 
   tileLabel: {
     paddingHorizontal: 8, paddingVertical: 6,
