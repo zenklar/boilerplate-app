@@ -286,7 +286,7 @@ export default function AsteroidsGame() {
         // Reached center — hand off to playing
         if (g.sy <= H / 2) {
           g.sy = H / 2; g.svx = 0; g.svy = 0;
-          g.sInv = INVINCIBLE;
+          g.sInv = 0;
           g.phase = 'playing';
           g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
           g.startTime = Date.now();
