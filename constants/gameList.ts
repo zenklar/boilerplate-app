@@ -11,6 +11,8 @@ export type GameEntry = {
   image: ReturnType<typeof require>;
 };
 
+const PLACEHOLDER = require('../assets/games/placeholder.png');
+
 export const GAME_LIST: GameEntry[] = [
   {
     id: 'asteroids',
@@ -29,7 +31,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Shooter',
     available: false,
     accentColor: '#69F0AE',
-    image: require('../assets/games/invaders.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'pacman',
@@ -38,7 +40,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Maze',
     available: false,
     accentColor: '#FFD700',
-    image: require('../assets/games/pacman.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'tetris',
@@ -47,7 +49,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Puzzle',
     available: false,
     accentColor: '#7C4DFF',
-    image: require('../assets/games/tetris.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'centipede',
@@ -56,7 +58,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Shooter',
     available: false,
     accentColor: '#8BC34A',
-    image: require('../assets/games/centipede.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'donkeykong',
@@ -65,7 +67,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Platform',
     available: false,
     accentColor: '#FF6D00',
-    image: require('../assets/games/donkeykong.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'galaga',
@@ -74,7 +76,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Shooter',
     available: false,
     accentColor: '#E040FB',
-    image: require('../assets/games/galaga.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'frogger',
@@ -83,7 +85,7 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Action',
     available: false,
     accentColor: '#26A69A',
-    image: require('../assets/games/frogger.png'),
+    image: PLACEHOLDER,
   },
   {
     id: 'breakout',
@@ -92,6 +94,6 @@ export const GAME_LIST: GameEntry[] = [
     genre: 'Action',
     available: false,
     accentColor: '#FF5252',
-    image: require('../assets/games/breakout.png'),
+    image: PLACEHOLDER,
   },
 ];
