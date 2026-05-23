@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameUIStore } from '../../store/gameStore';
+import { useCoinStore } from '../../store/coinStore';
 import AsteroidsGame from '../../components/AsteroidsGame';
 import ShipSelectScreen from '../../components/ShipSelectScreen';
 import LeaderboardScreen from '../../components/LeaderboardScreen';
@@ -23,7 +24,11 @@ const TAB_TITLES: Record<Tab, string> = {
 export default function AsteroidsPage() {
   const [tab, setTab] = useState<Tab>('play');
   const isGamePlaying = useGameUIStore((s) => s.isGamePlaying);
+  const coins = useCoinStore((s) => s.coins);
+  const loadCoins = useCoinStore((s) => s.loadCoins);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => { loadCoins(); }, []);
 
   const chrome = !isGamePlaying;
 
@@ -33,6 +38,12 @@ export default function AsteroidsPage() {
       {chrome && (
         <View style={[s.header, { paddingTop: insets.top }]}>
           <Text style={[s.headerTitle, { fontFamily: MONO }]}>{TAB_TITLES[tab]}</Text>
+          <View style={s.coinCounter}>
+            <View style={s.coinIcon}>
+              <Text style={s.coinIconLetter}>C</Text>
+            </View>
+            <Text style={[s.coinCount, { fontFamily: MONO }]}>{coins}</Text>
+          </View>
         </View>
       )}
 
@@ -96,7 +107,9 @@ const s = StyleSheet.create({
 
   header: {
     height: HEADER_H,
-    justifyContent: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 12,
     backgroundColor: '#000',
@@ -106,6 +119,17 @@ const s = StyleSheet.create({
   headerTitle: {
     color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 5,
   },
+  coinCounter: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  coinIcon: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#FFD700',
+    borderWidth: 1.5, borderColor: '#B8860B',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  coinIconLetter: { color: '#6B4500', fontSize: 9, fontWeight: '900' },
+  coinCount: { color: '#FFD700', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
 
   content: { flex: 1 },
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,15 @@ import {
   LayoutChangeEvent,
   Platform,
   PanResponder,
+  Animated,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
+import { useCoinStore } from '../store/coinStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
-import { playShoot, playThrustStart, playExplosion } from '../utils/sounds';
+import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const TICK_MS = 16;
@@ -146,6 +149,18 @@ export default function AsteroidsGame() {
   const [, setTick] = useState(0);
   const [newHS, setNewHS] = useState(false);
 
+  // Coin insert + countdown flow
+  type InsertPhase = 'coinanim' | 'countdown' | null;
+  const [insertPhase, setInsertPhase] = useState<InsertPhase>(null);
+  const [countNum, setCountNum] = useState<number>(3);
+  // Animated coin: starts above canvas, falls to center
+  const coinY     = useRef(new Animated.Value(-60)).current;
+  const coinScale = useRef(new Animated.Value(0.5)).current;
+  const coinOpacity = useRef(new Animated.Value(0)).current;
+  // Countdown number animation
+  const cdScale   = useRef(new Animated.Value(1)).current;
+  const cdOpacity = useRef(new Animated.Value(0)).current;
+
   const highScore = useGameUIStore((s) => s.highScore);
   const updateHighScore = useGameUIStore((s) => s.updateHighScore);
   const loadHighScore = useGameUIStore((s) => s.loadHighScore);
@@ -172,12 +187,15 @@ export default function AsteroidsGame() {
   const joyOff = useRef({ x: 0, y: 0 });
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
+  const coins    = useCoinStore((s) => s.coins);
+  const spendCoin = useCoinStore((s) => s.spendCoin);
 
   /* ── Load persisted state ── */
   useEffect(() => {
     loadHighScore();
     loadSelectedShip();
     loadRuns();
+    useCoinStore.getState().loadCoins();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -470,6 +488,71 @@ export default function AsteroidsGame() {
     setTick((t) => t + 1);
   };
 
+  /* ── Countdown ── */
+  const runCountdown = useCallback((n: number) => {
+    setCountNum(n);
+    cdScale.setValue(2.2);
+    cdOpacity.setValue(1);
+    if (Platform.OS === 'web') {
+      if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
+      else playCountdownGo();
+    }
+    Animated.parallel([
+      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(n > 0 ? 550 : 400),
+        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]),
+    ]).start(({ finished }) => {
+      if (!finished) return;
+      if (n > 1) {
+        setTimeout(() => runCountdown(n - 1), 80);
+      } else if (n === 1) {
+        setTimeout(() => runCountdown(0), 80); // "GO!"
+      } else {
+        // Done — start the actual game
+        setTimeout(() => {
+          setInsertPhase(null);
+          handleStartGame();
+        }, 120);
+      }
+    });
+  }, []);
+
+  /* ── Coin animation then countdown ── */
+  const runCoinAnimation = useCallback(() => {
+    const targetY = area.h / 2 - 30;
+    coinY.setValue(-60);
+    coinScale.setValue(0.5);
+    coinOpacity.setValue(1);
+    setInsertPhase('coinanim');
+    if (Platform.OS === 'web') playCoinInsert();
+
+    Animated.parallel([
+      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
+      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),
+    ]).start(() => {
+      // Coin "inserts" — quick punch then vanish
+      Animated.sequence([
+        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: true }),
+        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: true }),
+      ]).start(() => {
+        setInsertPhase('countdown');
+        runCountdown(3);
+      });
+    });
+  }, [area.h]);
+
+  /* ── Insert coin entry point (replaces direct handleStartGame calls) ── */
+  const handleInsertCoin = useCallback(() => {
+    if (coins <= 0) {
+      router.push('/(app)/shop' as any);
+      return;
+    }
+    spendCoin();
+    runCoinAnimation();
+  }, [coins, spendCoin, runCoinAnimation]);
+
   /* ── Layout handler ── */
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -663,7 +746,7 @@ export default function AsteroidsGame() {
         )}
 
         {/* ── Idle / title screen ── */}
-        {(!g || g.phase === 'idle') && (
+        {(!g || g.phase === 'idle') && insertPhase === null && (
           <View style={s.overlay}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
             <Text style={[s.yearText, { fontFamily: MONO }]}>1979</Text>
@@ -677,14 +760,58 @@ export default function AsteroidsGame() {
                 Mouse aim · LMB thrust · Space to fire
               </Text>
             )}
-            <Pressable onPress={handleStartGame} style={s.menuBtn}>
-              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>INSERT COIN</Text>
+            <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
+              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
+                {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
+              </Text>
             </Pressable>
+            <View style={s.coinHintRow}>
+              <View style={s.coinHintBadge}><Text style={s.coinHintBadgeLetter}>C</Text></View>
+              <Text style={[s.coinHint, { fontFamily: MONO }]}>
+                {coins > 0 ? `${coins} COIN${coins !== 1 ? 'S' : ''} AVAILABLE` : 'NO COINS — VISIT SHOP'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Coin insert animation overlay ── */}
+        {insertPhase === 'coinanim' && (
+          <View style={s.insertOverlay} pointerEvents="none">
+            <Animated.View
+              style={[
+                s.fallingCoin,
+                {
+                  left: area.w / 2 - 28,
+                  transform: [{ translateY: coinY }, { scale: coinScale }],
+                  opacity: coinOpacity,
+                },
+              ]}
+            >
+              <View style={s.fallingCoinInner}>
+                <Text style={s.fallingCoinLetter}>C</Text>
+              </View>
+              <View style={s.fallingCoinRing} />
+            </Animated.View>
+          </View>
+        )}
+
+        {/* ── Countdown overlay ── */}
+        {insertPhase === 'countdown' && (
+          <View style={s.countdownOverlay} pointerEvents="none">
+            <Animated.Text
+              style={[
+                s.countdownText,
+                { fontFamily: MONO },
+                { transform: [{ scale: cdScale }], opacity: cdOpacity },
+              ]}
+            >
+              {countNum === 0 ? 'GO!' : String(countNum)}
+            </Animated.Text>
           </View>
         )}
 
         {/* ── Game over screen ── */}
-        {g?.phase === 'gameover' && (
+        {g?.phase === 'gameover' && insertPhase === null && (
           <View style={s.gameOverOverlay}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
             <Text style={[s.finalScore, { fontFamily: MONO }]}>{g.score}</Text>
@@ -692,8 +819,10 @@ export default function AsteroidsGame() {
               <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
             )}
             <View style={s.btnRow}>
-              <Pressable onPress={handleStartGame} style={s.goBtn}>
-                <Text style={[s.goBtnTxt, { fontFamily: MONO }]}>PLAY AGAIN</Text>
+              <Pressable onPress={handleInsertCoin} style={s.goBtn}>
+                <Text style={[s.goBtnTxt, { fontFamily: MONO }]}>
+                  {coins > 0 ? 'PLAY AGAIN' : 'GET COINS'}
+                </Text>
               </Pressable>
               <Pressable onPress={handleBackToMenu} style={[s.goBtn, s.goBtnSecondary]}>
                 <Text style={[s.goBtnTxt, s.goBtnSecondaryTxt, { fontFamily: MONO }]}>
@@ -701,6 +830,11 @@ export default function AsteroidsGame() {
                 </Text>
               </Pressable>
             </View>
+            {coins === 0 && (
+              <Text style={[s.noCoinsHint, { fontFamily: MONO }]}>
+                NO COINS — VISIT SHOP TO GET MORE
+              </Text>
+            )}
           </View>
         )}
 
@@ -803,10 +937,20 @@ const s = StyleSheet.create({
   btnRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
   // Title screen button
   menuBtn: {
-    borderWidth: 1.5, borderColor: '#FFF',
+    borderWidth: 1.5, borderColor: '#FFD700',
     paddingHorizontal: 24, paddingVertical: 12,
   },
-  menuBtnTxt: { color: '#FFF', fontSize: 13, letterSpacing: 4 },
+  menuBtnNoCoins: { borderColor: '#555' },
+  menuBtnTxt: { color: '#FFD700', fontSize: 13, letterSpacing: 4 },
+  // Coin hint below INSERT COIN button
+  coinHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -4 },
+  coinHintBadge: {
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: '#FFD700', borderWidth: 1, borderColor: '#B8860B',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  coinHintBadgeLetter: { color: '#6B4500', fontSize: 6, fontWeight: '900' },
+  coinHint: { color: '#888', fontSize: 8, letterSpacing: 1 },
   // Game-over buttons — larger, clearly separated
   goBtn: {
     borderWidth: 2, borderColor: '#FFF',
@@ -816,6 +960,43 @@ const s = StyleSheet.create({
   goBtnTxt: { color: '#FFF', fontSize: 14, letterSpacing: 4 },
   goBtnSecondary: { borderColor: '#666' },
   goBtnSecondaryTxt: { color: '#999' },
+  noCoinsHint: { color: '#555', fontSize: 9, letterSpacing: 1, marginTop: 4 },
+
+  // Coin insert animation
+  insertOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'none',
+  },
+  fallingCoin: {
+    position: 'absolute',
+    top: 0,
+    width: 56, height: 56,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  fallingCoinInner: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#FFD700',
+    borderWidth: 3, borderColor: '#B8860B',
+    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+  },
+  fallingCoinLetter: { color: '#6B4500', fontSize: 24, fontWeight: '900' },
+  fallingCoinRing: {
+    position: 'absolute',
+    width: 68, height: 68, borderRadius: 34,
+    borderWidth: 2, borderColor: '#FFD70060',
+  },
+
+  // Countdown overlay
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  countdownText: {
+    color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
+    textShadowColor: '#FFD700', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24,
+  },
 
   /* Controls overlay */
   ctrlOverlay: {

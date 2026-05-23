@@ -77,6 +77,55 @@ export function playThrustStart(): { stop: () => void } {
   };
 }
 
+/** Classic two-tone arcade coin insert */
+export function playCoinInsert(): void {
+  const a = ac(); if (!a) return;
+  const tones = [880, 1320];
+  tones.forEach((freq, i) => {
+    const osc = a.createOscillator();
+    const gain = a.createGain();
+    osc.connect(gain); gain.connect(comp());
+    osc.type = 'square';
+    const t = a.currentTime + i * 0.055;
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.setValueAtTime(freq * 1.15, t + 0.012);
+    gain.gain.setValueAtTime(0.28, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    osc.start(t); osc.stop(t + 0.1);
+  });
+}
+
+/** Single countdown beep — higher pitch for final tick */
+export function playCountdownBeep(n: 3 | 2 | 1): void {
+  const a = ac(); if (!a) return;
+  const freq = n === 1 ? 1100 : 660;
+  const dur  = n === 1 ? 0.18 : 0.12;
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.22, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+  osc.start(a.currentTime); osc.stop(a.currentTime + dur + 0.01);
+}
+
+/** Ascending arpeggio for GO! */
+export function playCountdownGo(): void {
+  const a = ac(); if (!a) return;
+  [440, 554, 659, 880].forEach((freq, i) => {
+    const osc = a.createOscillator();
+    const gain = a.createGain();
+    osc.connect(gain); gain.connect(comp());
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    const t = a.currentTime + i * 0.045;
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.start(t); osc.stop(t + 0.15);
+  });
+}
+
 /** Punchy noise-burst explosion with optional sub-bass tone for large/medium */
 export function playExplosion(size: 'small' | 'medium' | 'large'): void {
   const a = ac(); if (!a) return;
