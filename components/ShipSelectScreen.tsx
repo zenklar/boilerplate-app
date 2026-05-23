@@ -1,12 +1,3 @@
-/**
- * ShipSelectScreen
- * Full-screen ship selection UI for the Asteroids game.
- *
- * - Shows all 9 ships in a scrollable grid.
- * - Locked ships (scoreRequired > highScore) appear dimmed with a padlock.
- * - Tapping an unlocked ship selects it (persisted via shipStore).
- * - The currently-selected ship is highlighted with an accent border.
- */
 import React, { useEffect } from 'react';
 import {
   View,
@@ -22,8 +13,8 @@ import { useShipStore } from '../store/shipStore';
 import { useGameUIStore } from '../store/gameStore';
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-const CARD_SIZE = 80;   // px — preview square
-const GRID_COLS = 3;
+const CARD_SIZE = 76;
+const GAP = 8;
 
 type Props = {
   onClose?: () => void;
@@ -35,11 +26,10 @@ export default function ShipSelectScreen({ onClose }: Props) {
   const loadSelectedShip = useShipStore((s) => s.loadSelectedShip);
   const highScore = useGameUIStore((s) => s.highScore);
 
-  useEffect(() => {
-    loadSelectedShip();
-  }, []);
+  useEffect(() => { loadSelectedShip(); }, []);
 
   const selectedShip = SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0];
+  const locked = highScore < selectedShip.scoreRequired;
 
   return (
     <View style={styles.root}>
@@ -51,18 +41,29 @@ export default function ShipSelectScreen({ onClose }: Props) {
         </Text>
       </View>
 
-      {/* ── Selected ship detail panel ── */}
+      {/* ── Detail panel ── */}
       <View style={styles.detailPanel}>
-        <ShipPreview ship={selectedShip} size={120} />
+        <ShipPreview ship={selectedShip} size={110} opacity={locked ? 0.3 : 1} />
         <View style={styles.detailText}>
-          <Text style={[styles.detailName, { fontFamily: MONO }]}>{selectedShip.name}</Text>
-          <Text style={[styles.detailFrom, { fontFamily: MONO }]}>{selectedShip.from}</Text>
-          <Text style={[styles.detailQuote, { fontFamily: MONO }]}>"{selectedShip.quote}"</Text>
-          {selectedShip.scoreRequired > 0 && (
-            <Text style={[styles.detailReq, { fontFamily: MONO }]}>
-              Unlocks at {selectedShip.scoreRequired.toLocaleString()} pts
+          <Text style={[styles.detailName, { fontFamily: MONO }]}>
+            {selectedShip.name}
+          </Text>
+          {selectedShip.scoreRequired === 0 ? (
+            <Text style={[styles.detailUnlock, { fontFamily: MONO, color: '#4FC3F7' }]}>
+              UNLOCKED
+            </Text>
+          ) : locked ? (
+            <Text style={[styles.detailUnlock, { fontFamily: MONO, color: '#FF6D00' }]}>
+              LOCKED — {selectedShip.scoreRequired.toLocaleString()} PTS
+            </Text>
+          ) : (
+            <Text style={[styles.detailUnlock, { fontFamily: MONO, color: '#69F0AE' }]}>
+              UNLOCKED
             </Text>
           )}
+          <Text style={[styles.detailCount, { fontFamily: MONO }]}>
+            {SHIPS.filter((s) => highScore >= s.scoreRequired).length} / {SHIPS.length} UNLOCKED
+          </Text>
         </View>
       </View>
 
@@ -73,42 +74,35 @@ export default function ShipSelectScreen({ onClose }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {SHIPS.map((ship) => {
-          const locked = highScore < ship.scoreRequired;
+          const isLocked = highScore < ship.scoreRequired;
           const isSelected = ship.id === selectedShipId;
 
           return (
             <Pressable
               key={ship.id}
-              style={({ pressed }) => [
+              style={({ pressed }: { pressed: boolean }) => [
                 styles.card,
-                isSelected && { borderColor: ship.accent, borderWidth: 2 },
-                locked && styles.cardLocked,
-                pressed && !locked && styles.cardPressed,
+                isSelected && styles.cardSelected,
+                isLocked && styles.cardLocked,
+                pressed && !isLocked && styles.cardPressed,
               ]}
-              onPress={() => {
-                if (!locked) setSelectedShipId(ship.id);
-              }}
-              accessibilityLabel={`${ship.name}${locked ? ' (locked)' : ''}`}
+              onPress={() => { if (!isLocked) setSelectedShipId(ship.id); }}
+              accessibilityLabel={`${ship.name}${isLocked ? ' locked' : ''}`}
             >
-              {/* Preview */}
-              <View style={[styles.previewWrap, locked && styles.previewDim]}>
-                <ShipPreview ship={ship} size={CARD_SIZE} />
-              </View>
+              <ShipPreview ship={ship} size={CARD_SIZE} opacity={isLocked ? 0.2 : 1} />
 
-              {/* Ship name */}
               <Text
                 style={[
                   styles.cardName,
                   { fontFamily: MONO },
-                  locked && styles.cardNameLocked,
+                  isLocked && styles.cardNameLocked,
                 ]}
                 numberOfLines={1}
               >
                 {ship.name}
               </Text>
 
-              {/* Lock overlay */}
-              {locked && (
+              {isLocked && (
                 <View style={styles.lockOverlay}>
                   <Text style={styles.lockIcon}>🔒</Text>
                   <Text style={[styles.lockScore, { fontFamily: MONO }]}>
@@ -123,7 +117,6 @@ export default function ShipSelectScreen({ onClose }: Props) {
         })}
       </ScrollView>
 
-      {/* ── Close / back button ── */}
       {onClose && (
         <Pressable style={styles.closeBtn} onPress={onClose}>
           <Text style={[styles.closeBtnTxt, { fontFamily: MONO }]}>← BACK</Text>
@@ -133,18 +126,11 @@ export default function ShipSelectScreen({ onClose }: Props) {
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────────────────────── */
-const GAP = 10;
-const CARD_TOTAL = (CARD_SIZE + GAP * 2 + 2 /* border */ );
+const CARD_OUTER = CARD_SIZE + GAP * 2 + 2;
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#000',
-    paddingTop: 8,
-  },
+  root: { flex: 1, backgroundColor: '#000', paddingTop: 8 },
 
-  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -154,61 +140,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A',
   },
-  title: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 6,
-  },
-  hiScore: {
-    color: '#555',
-    fontSize: 12,
-    letterSpacing: 2,
-  },
+  title: { color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 6 },
+  hiScore: { color: '#555', fontSize: 12, letterSpacing: 2 },
 
-  // Detail panel
   detailPanel: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
     gap: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A',
-    minHeight: 140,
+    minHeight: 130,
   },
-  detailText: {
-    flex: 1,
-    gap: 4,
-  },
+  detailText: { flex: 1, gap: 6 },
   detailName: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 2,
+    color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 2,
   },
-  detailFrom: {
-    color: '#888',
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  detailQuote: {
-    color: '#555',
-    fontSize: 10,
-    fontStyle: 'italic',
-    lineHeight: 15,
-  },
-  detailReq: {
-    color: '#FF6D00',
-    fontSize: 10,
-    marginTop: 4,
-    letterSpacing: 1,
-  },
+  detailUnlock: { fontSize: 10, letterSpacing: 1 },
+  detailCount: { color: '#444', fontSize: 9, letterSpacing: 1 },
 
-  // Grid
-  scroll: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -217,74 +169,39 @@ const styles = StyleSheet.create({
     gap: GAP,
   },
 
-  // Card
   card: {
-    width: CARD_SIZE + GAP * 2,
+    width: CARD_OUTER,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: GAP,
     borderWidth: 1,
     borderColor: '#222',
     borderRadius: 6,
-    backgroundColor: '#0A0A0A',
-    gap: 6,
+    backgroundColor: '#080808',
+    gap: 4,
     position: 'relative',
   },
-  cardLocked: {
-    borderColor: '#1A1A1A',
-  },
-  cardPressed: {
-    backgroundColor: '#111',
-  },
+  cardSelected: { borderColor: '#4FC3F7', borderWidth: 2, backgroundColor: '#0A1520' },
+  cardLocked: { borderColor: '#141414' },
+  cardPressed: { backgroundColor: '#111' },
 
-  previewWrap: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewDim: {
-    opacity: 0.25,
-  },
+  cardName: { color: '#AAA', fontSize: 7, letterSpacing: 1, textAlign: 'center' },
+  cardNameLocked: { color: '#2A2A2A' },
 
-  cardName: {
-    color: '#CCC',
-    fontSize: 8,
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  cardNameLocked: {
-    color: '#333',
-  },
-
-  // Lock overlay
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
   },
-  lockIcon: {
-    fontSize: 18,
-    opacity: 0.7,
-  },
-  lockScore: {
-    color: '#555',
-    fontSize: 9,
-    letterSpacing: 1,
-  },
+  lockIcon: { fontSize: 16, opacity: 0.6 },
+  lockScore: { color: '#444', fontSize: 8, letterSpacing: 1 },
 
-  // Close button
   closeBtn: {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#1A1A1A',
-    alignItems: 'flex-start',
   },
-  closeBtnTxt: {
-    color: '#666',
-    fontSize: 12,
-    letterSpacing: 3,
-  },
+  closeBtnTxt: { color: '#555', fontSize: 12, letterSpacing: 3 },
 });
