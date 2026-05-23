@@ -69,9 +69,6 @@ function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
         >
           {game.title}
         </Text>
-        <Text style={[st.tileMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
-          {game.year !== '—' ? game.year : game.genre}
-        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -89,16 +86,6 @@ export default function HomeScreen() {
         contentContainerStyle={[st.scroll, { paddingBottom: theme.spacing.xxl }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Section header */}
-        <View style={st.sectionHeader}>
-          <Text style={[st.sectionTitle, { color: theme.colors.textMuted }]}>ALL GAMES</Text>
-          <View style={[st.sectionBadge, { backgroundColor: theme.colors.backgroundSecondary }]}>
-            <Text style={[st.sectionBadgeTxt, { color: theme.colors.textMuted }]}>
-              {GAME_LIST.filter(g => g.available).length} available
-            </Text>
-          </View>
-        </View>
-
         {/* Grid */}
         <View style={[st.grid, { paddingHorizontal: H_PAD, gap: TILE_GAP }]}>
           {GAME_LIST.map((game) => (
