@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
+import { useSubscriptionStore } from '../store/subscriptionStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo } from '../utils/sounds';
@@ -189,6 +190,7 @@ export default function AsteroidsGame() {
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
   const coins    = useCoinStore((s) => s.coins);
   const spendCoin = useCoinStore((s) => s.spendCoin);
+  const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
 
   /* ── Load persisted state ── */
   useEffect(() => {
@@ -196,6 +198,7 @@ export default function AsteroidsGame() {
     loadSelectedShip();
     loadRuns();
     useCoinStore.getState().loadCoins();
+    useSubscriptionStore.getState().loadSubscription();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -545,13 +548,13 @@ export default function AsteroidsGame() {
 
   /* ── Insert coin entry point (replaces direct handleStartGame calls) ── */
   const handleInsertCoin = useCallback(() => {
-    if (coins <= 0) {
+    if (!isSubscribed && coins <= 0) {
       router.push('/(app)/shop' as any);
       return;
     }
-    spendCoin();
+    if (!isSubscribed) spendCoin();
     runCoinAnimation();
-  }, [coins, spendCoin, runCoinAnimation]);
+  }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
   /* ── Layout handler ── */
   const onLayout = (e: LayoutChangeEvent) => {
