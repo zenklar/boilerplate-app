@@ -156,21 +156,35 @@ export default function AsteroidsGame() {
         case 'ArrowUp': case 'KeyW': ctrl.current.thrust = false; break;
       }
     };
-    const onMouseMove = (e: MouseEvent) => { mousePos.current = { x: e.clientX, y: e.clientY }; };
+    const onMouseMove = (e: MouseEvent) => {
+      mousePos.current = { x: e.clientX, y: e.clientY };
+      // Detect if LMB was released outside the window (mouseup missed)
+      if (!(e.buttons & 1)) ctrl.current.thrust = false;
+    };
     const onMouseDown = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = true; };
     const onMouseUp = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = false; };
+    // Release all controls if the window loses focus
+    const onBlur = () => {
+      ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
+    };
+    // Prevent right-click context menu swallowing mouseup
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('blur', onBlur);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('blur', onBlur);
     };
   }, []);
 
@@ -451,8 +465,8 @@ export default function AsteroidsGame() {
           />
         ))}
 
-        {/* Bullets */}
-        {g?.bullets.map((b, i) => (
+        {/* Bullets — only during active play */}
+        {g?.phase === 'playing' && g.bullets.map((b, i) => (
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
@@ -461,8 +475,8 @@ export default function AsteroidsGame() {
           <View style={[s.flame, { left: flameX - 4, top: flameY - 5 }]} />
         )}
 
-        {/* Ship */}
-        {g && g.phase !== 'idle' && shipVisible && (
+        {/* Ship — only during active play */}
+        {g && g.phase === 'playing' && shipVisible && (
           <View style={[s.ship, {
             left: g.sx - SHIP_W / 2,
             top: g.sy - SHIP_H / 2,
@@ -524,18 +538,18 @@ export default function AsteroidsGame() {
 
         {/* ── Game over screen ── */}
         {g?.phase === 'gameover' && (
-          <View style={s.overlay}>
+          <View style={s.gameOverOverlay}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
             <Text style={[s.finalScore, { fontFamily: MONO }]}>{g.score}</Text>
             {newHS && (
               <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
             )}
             <View style={s.btnRow}>
-              <Pressable onPress={handleStartGame} style={s.menuBtn}>
-                <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>PLAY AGAIN</Text>
+              <Pressable onPress={handleStartGame} style={s.goBtn}>
+                <Text style={[s.goBtnTxt, { fontFamily: MONO }]}>PLAY AGAIN</Text>
               </Pressable>
-              <Pressable onPress={handleBackToMenu} style={[s.menuBtn, s.menuBtnGhost]}>
-                <Text style={[s.menuBtnTxt, s.menuBtnGhostTxt, { fontFamily: MONO }]}>
+              <Pressable onPress={handleBackToMenu} style={[s.goBtn, s.goBtnSecondary]}>
+                <Text style={[s.goBtnTxt, s.goBtnSecondaryTxt, { fontFamily: MONO }]}>
                   MENU
                 </Text>
               </Pressable>
@@ -637,24 +651,40 @@ const s = StyleSheet.create({
   },
   webIdleHint: { color: '#555', fontSize: 12, letterSpacing: 1 },
 
+  // Title/idle overlay — transparent so drifting asteroids show through
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center', alignItems: 'center', gap: 14,
   },
+  // Game-over overlay — solid black so nothing bleeds through
+  gameOverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    justifyContent: 'center', alignItems: 'center', gap: 18,
+  },
+
   titleText: { color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8 },
   yearText: { color: '#444', fontSize: 14, letterSpacing: 2 },
   hiLabel: { color: '#FFD700', fontSize: 14, letterSpacing: 1 },
-  finalScore: { color: '#FFF', fontSize: 44, fontWeight: '700', letterSpacing: 4 },
-  newHsText: { color: '#FFD700', fontSize: 16, fontWeight: '700', letterSpacing: 2 },
+  finalScore: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 6 },
+  newHsText: { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },
 
-  btnRow: { flexDirection: 'row', gap: 14, marginTop: 6 },
+  btnRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
+  // Title screen button
   menuBtn: {
     borderWidth: 1.5, borderColor: '#FFF',
     paddingHorizontal: 24, paddingVertical: 12,
   },
   menuBtnTxt: { color: '#FFF', fontSize: 13, letterSpacing: 4 },
-  menuBtnGhost: { borderColor: '#444' },
-  menuBtnGhostTxt: { color: '#666' },
+  // Game-over buttons — larger, clearly separated
+  goBtn: {
+    borderWidth: 2, borderColor: '#FFF',
+    paddingHorizontal: 28, paddingVertical: 14,
+    minWidth: 130, alignItems: 'center',
+  },
+  goBtnTxt: { color: '#FFF', fontSize: 14, letterSpacing: 4 },
+  goBtnSecondary: { borderColor: '#444' },
+  goBtnSecondaryTxt: { color: '#666' },
 
   /* Controls overlay */
   ctrlOverlay: {
