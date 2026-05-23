@@ -8,6 +8,7 @@ import {
   Platform,
   PanResponder,
 } from 'react-native';
+import Svg, { Polygon } from 'react-native-svg';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { SHIPS } from '../constants/ships';
@@ -52,9 +53,7 @@ interface Asteroid {
   x: number; y: number; vx: number; vy: number;
   radius: number; size: Size;
   rot: number; rotSpeed: number;
-  aw: number; ah: number;  // render half-dimensions; radius is still used for collision
-  br: [number, number, number, number];
-  fill: string;
+  verts: number[]; // per-vertex radius offsets, evenly spaced angles
 }
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Particle {
@@ -96,40 +95,45 @@ function mkAsteroid(
     do { x = rand(r, W - r); y = rand(r, H - r); tries++; }
     while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
   }
-  // Irregular lumpy shapes — mostly round but with high corner variation
-  // Each archetype keeps a generally organic outline, not square
-  let br: [number, number, number, number];
-  const roll = Math.random();
-  if (roll < 0.3) {
-    // Lumpy blob — all rounded but each corner very different
-    br = [r * rand(0.5, 1.2), r * rand(0.15, 0.55), r * rand(0.55, 1.3), r * rand(0.1, 0.5)];
-  } else if (roll < 0.55) {
-    // One dominant round corner, the others varied and smaller
-    br = [r * rand(0.8, 1.5), r * rand(0.1, 0.4), r * rand(0.3, 0.8), r * rand(0.1, 0.38)];
-  } else if (roll < 0.78) {
-    // Alternating round/less-round — gives a craggy silhouette
-    br = [r * rand(0.5, 1.1), r * rand(0.1, 0.38), r * rand(0.6, 1.2), r * rand(0.1, 0.35)];
-  } else {
-    // Fairly uniform roundness — smooth but not a circle
-    const base = rand(0.4, 0.8);
-    br = [
-      r * (base + rand(-0.25, 0.25)), r * (base + rand(-0.25, 0.25)),
-      r * (base + rand(-0.25, 0.25)), r * (base + rand(-0.25, 0.25)),
-    ];
+  // Classic asteroid polygon — N vertices evenly spaced around a circle,
+  // each with its own radius so the outline is jagged and irregular.
+  const nv = Math.round(rand(7, 13)); // 7–12 vertices like the original game
+  const verts: number[] = [];
+  for (let i = 0; i < nv; i++) {
+    const u = Math.random();
+    if (u < 0.22) {
+      verts.push(r * rand(0.45, 0.65)); // concave indent — the classic "bite"
+    } else if (u < 0.45) {
+      verts.push(r * rand(0.65, 0.80)); // shallow dip
+    } else {
+      verts.push(r * rand(0.85, 1.20)); // normal outer vertex
+    }
   }
-  const aw = r * rand(0.82, 1.38);
-  const ah = r * rand(0.82, 1.38);
   return {
     id: uid(), x, y,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
     radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5),
-    aw, ah, br, fill: '#FFF',
+    verts,
   };
 }
 
 function mkLevel(lvl: number, W: number, H: number, sx: number, sy: number): Asteroid[] {
   return Array.from({ length: Math.min(3 + lvl, 14) }, () =>
     mkAsteroid(W, H, 'large', sx, sy));
+}
+
+/** Convert stored per-vertex radii to an SVG polygon points string.
+ *  The SVG viewport is (radius*2) × (radius*2); centre is (radius, radius). */
+function asteroidPoints(a: Asteroid): string {
+  const cx = a.radius;
+  const cy = a.radius;
+  const step = (Math.PI * 2) / a.verts.length;
+  return a.verts
+    .map((r, i) => {
+      const angle = i * step - Math.PI / 2; // start at top
+      return `${cx + Math.cos(angle) * r},${cy + Math.sin(angle) * r}`;
+    })
+    .join(' ');
 }
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
@@ -526,20 +530,29 @@ export default function AsteroidsGame() {
       {/* ── Game canvas (fills all space) ── */}
       <View style={s.canvas}>
 
-        {/* Drifting asteroids */}
-        {g?.asteroids.map((a) => (
-          <View
-            key={a.id}
-            style={[s.asteroid, {
-              width: a.aw * 2, height: a.ah * 2,
-              borderTopLeftRadius: a.br[0], borderTopRightRadius: a.br[1],
-              borderBottomRightRadius: a.br[2], borderBottomLeftRadius: a.br[3],
-              left: a.x - a.aw, top: a.y - a.ah,
-              transform: [{ rotate: `${a.rot}deg` }],
-              backgroundColor: a.fill,
-            }]}
-          />
-        ))}
+        {/* Asteroids — SVG polygons for authentic irregular shapes */}
+        {g?.asteroids.map((a) => {
+          const d = a.radius * 2;
+          return (
+            <Svg
+              key={a.id}
+              width={d} height={d}
+              style={{
+                position: 'absolute',
+                left: a.x - a.radius,
+                top: a.y - a.radius,
+                transform: [{ rotate: `${a.rot}deg` }],
+              }}
+            >
+              <Polygon
+                points={asteroidPoints(a)}
+                fill="#FFF"
+                stroke="#CCC"
+                strokeWidth={1.5}
+              />
+            </Svg>
+          );
+        })}
 
         {/* Bullets — only during active play */}
         {g?.phase === 'playing' && g.bullets.map((b, i) => (
@@ -714,10 +727,6 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   canvas: { flex: 1, overflow: 'hidden' },
 
-  asteroid: {
-    position: 'absolute',
-    borderWidth: 1.5, borderColor: '#CCC',
-  },
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
   },
