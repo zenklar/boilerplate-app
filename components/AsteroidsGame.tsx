@@ -54,6 +54,7 @@ interface Asteroid {
   rot: number; rotSpeed: number;
   aw: number; ah: number;  // render half-dimensions; radius is still used for collision
   br: [number, number, number, number];
+  fill: string;
 }
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Particle {
@@ -95,30 +96,36 @@ function mkAsteroid(
     do { x = rand(r, W - r); y = rand(r, H - r); tries++; }
     while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
   }
-  // Pick a random shape archetype for variety
+  // Sharp polygon shapes — keep border-radii low so rocks look rocky, not blobby
   let br: [number, number, number, number];
   const roll = Math.random();
-  if (roll < 0.25) {
-    // Jagged — alternating sharp and round corners
-    br = [r * rand(0.05, 0.35), r * rand(0.8, 2.0), r * rand(0.05, 0.3), r * rand(0.9, 2.0)];
-  } else if (roll < 0.45) {
-    // One sharp corner, rest rounded
-    const b = r * rand(0.7, 1.4);
-    br = [r * rand(0.05, 0.22), b, b * rand(0.7, 1.2), b * rand(0.6, 1.0)];
-  } else if (roll < 0.7) {
-    // Fully irregular — all four corners different
-    br = [r * rand(0.1, 1.9), r * rand(0.1, 0.7), r * rand(0.8, 2.0), r * rand(0.1, 0.8)];
+  if (roll < 0.3) {
+    // Near-square polygon — all corners nearly sharp
+    br = [r * rand(0, 0.1), r * rand(0, 0.1), r * rand(0, 0.1), r * rand(0, 0.1)];
+  } else if (roll < 0.55) {
+    // One notched corner, the rest sharp — lopsided rock
+    const notch = Math.floor(Math.random() * 4);
+    br = ([0, 1, 2, 3].map((i) =>
+      i === notch ? r * rand(0.15, 0.45) : r * rand(0, 0.08)
+    ) as [number, number, number, number]);
+  } else if (roll < 0.78) {
+    // Two opposite corners slightly rounded — angular diamond feel
+    br = [r * rand(0, 0.06), r * rand(0.1, 0.35), r * rand(0, 0.06), r * rand(0.1, 0.35)];
   } else {
-    // Classic lumpy blob — all corners similar
-    br = [r * rand(0.5, 1.5), r * rand(0.5, 1.5), r * rand(0.5, 1.5), r * rand(0.5, 1.5)];
+    // All four corners small but not zero — craggy blob
+    br = [r * rand(0.05, 0.22), r * rand(0.05, 0.22), r * rand(0.05, 0.22), r * rand(0.05, 0.22)];
   }
-  const aw = r * rand(0.8, 1.35);
-  const ah = r * rand(0.8, 1.35);
+  // Wider aspect ratio variation makes shapes feel more distinct
+  const aw = r * rand(0.65, 1.55);
+  const ah = r * rand(0.65, 1.55);
+  // Gray fill palette — rocky grays with subtle variation
+  const FILLS = ['#3C3C3C', '#484848', '#525252', '#404040', '#575757', '#434343', '#5A5A5A', '#3A3A3A'];
+  const fill = FILLS[Math.floor(Math.random() * FILLS.length)];
   return {
     id: uid(), x, y,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
     radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5),
-    aw, ah, br,
+    aw, ah, br, fill,
   };
 }
 
@@ -335,17 +342,18 @@ export default function AsteroidsGame() {
           if (d2(b.x, b.y, a.x, a.y) < a.radius ** 2) {
             deadA.add(a.id); deadB.add(bi);
             g.score += SCORE_MAP[a.size];
-            // Debris burst
-            const numDebris = a.size === 'large' ? 14 : a.size === 'medium' ? 9 : 5;
+            // Debris burst — more particles, bigger, faster, longer-lived
+            const numDebris = a.size === 'large' ? 22 : a.size === 'medium' ? 14 : 8;
+            const maxSpd = a.size === 'large' ? 5.5 : a.size === 'medium' ? 4.0 : 3.0;
             for (let di = 0; di < numDebris; di++) {
-              const dir = rand(0, Math.PI * 2);
-              const spd = rand(0.4, a.size === 'large' ? 3.5 : 2.5);
-              const dLife = Math.round(rand(12, 26));
+              const dDir = rand(0, Math.PI * 2);
+              const dSpd = rand(0.8, maxSpd);
+              const dLife = Math.round(rand(24, 42));
               g.particles.push({
                 id: uid(), x: a.x, y: a.y,
-                vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
+                vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
                 life: dLife, maxLife: dLife,
-                size: rand(1.5, 3.5), kind: 'debris',
+                size: rand(2.5, a.size === 'large' ? 7 : 5), kind: 'debris',
               });
             }
             if (Platform.OS === 'web') playExplosion(a.size);
@@ -530,6 +538,7 @@ export default function AsteroidsGame() {
               borderBottomRightRadius: a.br[2], borderBottomLeftRadius: a.br[3],
               left: a.x - a.aw, top: a.y - a.ah,
               transform: [{ rotate: `${a.rot}deg` }],
+              backgroundColor: a.fill,
             }]}
           />
         ))}
@@ -539,18 +548,22 @@ export default function AsteroidsGame() {
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
-        {/* Particles (thruster = white→blue, debris = white→gray) */}
+        {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
         {g?.phase === 'playing' && g.particles.map((p) => {
           const t = p.life / p.maxLife;
           let rgb: string;
+          let opacity: number;
           if (p.kind === 'debris') {
-            const c = Math.round(160 + 95 * t);
+            // Start bright white, cool to mid-gray, fade out
+            const c = Math.round(200 + 55 * Math.min(1, t * 2));
             rgb = `rgb(${c},${c},${c})`;
+            opacity = Math.min(1, t * 1.5);  // fully opaque for most of life, quick fade at end
           } else {
             // Thruster: white (t=1) → light blue (t=0.5) → blue (t=0)
             const rv = Math.round(Math.min(255, 255 * t * 1.6));
             const gv = Math.round(Math.min(255, 220 * t * 1.6));
             rgb = `rgb(${rv},${gv},255)`;
+            opacity = t * 0.9;
           }
           return (
             <View
@@ -560,7 +573,7 @@ export default function AsteroidsGame() {
                 width: p.size, height: p.size,
                 borderRadius: p.size / 2,
                 backgroundColor: rgb,
-                opacity: t * 0.9,
+                opacity,
                 left: p.x - p.size / 2,
                 top: p.y - p.size / 2,
               }}
@@ -705,7 +718,7 @@ const s = StyleSheet.create({
 
   asteroid: {
     position: 'absolute',
-    borderWidth: 2, borderColor: '#FFF', backgroundColor: 'transparent',
+    borderWidth: 1.5, borderColor: '#888',
   },
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',

@@ -10,12 +10,28 @@ function ac(): AudioContext | null {
   return _ctx;
 }
 
+// Shared compressor/limiter so we can boost explosion volumes without hard clipping
+let _comp: DynamicsCompressorNode | null = null;
+function comp(): DynamicsCompressorNode {
+  const a = ac()!;
+  if (!_comp) {
+    _comp = a.createDynamicsCompressor();
+    _comp.threshold.value = -4;
+    _comp.knee.value = 2;
+    _comp.ratio.value = 8;
+    _comp.attack.value = 0.001;
+    _comp.release.value = 0.12;
+    _comp.connect(a.destination);
+  }
+  return _comp;
+}
+
 /** Short square-wave blip — classic laser shot */
 export function playShoot(): void {
   const a = ac(); if (!a) return;
   const osc = a.createOscillator();
   const gain = a.createGain();
-  osc.connect(gain); gain.connect(a.destination);
+  osc.connect(gain); gain.connect(comp());
   osc.type = 'square';
   osc.frequency.setValueAtTime(640, a.currentTime);
   osc.frequency.exponentialRampToValueAtTime(90, a.currentTime + 0.1);
@@ -48,7 +64,7 @@ export function playThrustStart(): { stop: () => void } {
   gain.gain.setValueAtTime(0, a.currentTime);
   gain.gain.linearRampToValueAtTime(0.14, a.currentTime + 0.08);
 
-  src.connect(filt); filt.connect(gain); gain.connect(a.destination);
+  src.connect(filt); filt.connect(gain); gain.connect(comp());
   src.start();
 
   return {
@@ -61,30 +77,48 @@ export function playThrustStart(): { stop: () => void } {
   };
 }
 
-/** Noise-burst explosion — size controls duration, pitch and volume */
+/** Punchy noise-burst explosion with optional sub-bass tone for large/medium */
 export function playExplosion(size: 'small' | 'medium' | 'large'): void {
   const a = ac(); if (!a) return;
-  const dur   = size === 'large' ? 0.65 : size === 'medium' ? 0.35 : 0.18;
-  const freq  = size === 'large' ? 90   : size === 'medium' ? 200  : 450;
-  const vol   = size === 'large' ? 0.55 : size === 'medium' ? 0.38 : 0.22;
+  const dur  = size === 'large' ? 0.85 : size === 'medium' ? 0.48 : 0.24;
+  const vol  = size === 'large' ? 1.4  : size === 'medium' ? 0.95 : 0.55;
+  const cutoff = size === 'large' ? 500 : size === 'medium' ? 1000 : 2200;
 
+  // White noise with amplitude envelope baked in
   const bufLen = Math.round(a.sampleRate * dur);
   const buf = a.createBuffer(1, bufLen, a.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < bufLen; i++) {
-    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 1.4);
+    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 1.1);
   }
 
   const src = a.createBufferSource();
   src.buffer = buf;
 
+  // Wider lowpass than before — preserves more energy
   const filt = a.createBiquadFilter();
   filt.type = 'lowpass';
-  filt.frequency.value = freq;
+  filt.frequency.value = cutoff;
+  filt.Q.value = 0.4;
 
   const gain = a.createGain();
   gain.gain.value = vol;
 
-  src.connect(filt); filt.connect(gain); gain.connect(a.destination);
+  src.connect(filt); filt.connect(gain); gain.connect(comp());
   src.start();
+
+  // Sub-bass pitch-drop tone for large/medium — the classic arcade "boom"
+  if (size !== 'small') {
+    const osc = a.createOscillator();
+    const og = a.createGain();
+    osc.type = 'sine';
+    const startFreq = size === 'large' ? 90 : 160;
+    osc.frequency.setValueAtTime(startFreq, a.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(18, a.currentTime + dur * 0.55);
+    og.gain.setValueAtTime(vol * 0.7, a.currentTime);
+    og.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur * 0.5);
+    osc.connect(og); og.connect(comp());
+    osc.start(a.currentTime);
+    osc.stop(a.currentTime + dur);
+  }
 }
