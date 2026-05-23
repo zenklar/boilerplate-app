@@ -96,36 +96,34 @@ function mkAsteroid(
     do { x = rand(r, W - r); y = rand(r, H - r); tries++; }
     while (ox !== undefined && d2(x, y, ox, oy!) < SAFE_R ** 2 && tries < 40);
   }
-  // Sharp polygon shapes — keep border-radii low so rocks look rocky, not blobby
+  // Irregular lumpy shapes — mostly round but with high corner variation
+  // Each archetype keeps a generally organic outline, not square
   let br: [number, number, number, number];
   const roll = Math.random();
   if (roll < 0.3) {
-    // Near-square polygon — all corners nearly sharp
-    br = [r * rand(0, 0.1), r * rand(0, 0.1), r * rand(0, 0.1), r * rand(0, 0.1)];
+    // Lumpy blob — all rounded but each corner very different
+    br = [r * rand(0.5, 1.2), r * rand(0.15, 0.55), r * rand(0.55, 1.3), r * rand(0.1, 0.5)];
   } else if (roll < 0.55) {
-    // One notched corner, the rest sharp — lopsided rock
-    const notch = Math.floor(Math.random() * 4);
-    br = ([0, 1, 2, 3].map((i) =>
-      i === notch ? r * rand(0.15, 0.45) : r * rand(0, 0.08)
-    ) as [number, number, number, number]);
+    // One dominant round corner, the others varied and smaller
+    br = [r * rand(0.8, 1.5), r * rand(0.1, 0.4), r * rand(0.3, 0.8), r * rand(0.1, 0.38)];
   } else if (roll < 0.78) {
-    // Two opposite corners slightly rounded — angular diamond feel
-    br = [r * rand(0, 0.06), r * rand(0.1, 0.35), r * rand(0, 0.06), r * rand(0.1, 0.35)];
+    // Alternating round/less-round — gives a craggy silhouette
+    br = [r * rand(0.5, 1.1), r * rand(0.1, 0.38), r * rand(0.6, 1.2), r * rand(0.1, 0.35)];
   } else {
-    // All four corners small but not zero — craggy blob
-    br = [r * rand(0.05, 0.22), r * rand(0.05, 0.22), r * rand(0.05, 0.22), r * rand(0.05, 0.22)];
+    // Fairly uniform roundness — smooth but not a circle
+    const base = rand(0.4, 0.8);
+    br = [
+      r * (base + rand(-0.25, 0.25)), r * (base + rand(-0.25, 0.25)),
+      r * (base + rand(-0.25, 0.25)), r * (base + rand(-0.25, 0.25)),
+    ];
   }
-  // Wider aspect ratio variation makes shapes feel more distinct
-  const aw = r * rand(0.65, 1.55);
-  const ah = r * rand(0.65, 1.55);
-  // Gray fill palette — rocky grays with subtle variation
-  const FILLS = ['#3C3C3C', '#484848', '#525252', '#404040', '#575757', '#434343', '#5A5A5A', '#3A3A3A'];
-  const fill = FILLS[Math.floor(Math.random() * FILLS.length)];
+  const aw = r * rand(0.82, 1.38);
+  const ah = r * rand(0.82, 1.38);
   return {
     id: uid(), x, y,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
     radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5),
-    aw, ah, br, fill,
+    aw, ah, br, fill: '#FFF',
   };
 }
 
@@ -718,7 +716,7 @@ const s = StyleSheet.create({
 
   asteroid: {
     position: 'absolute',
-    borderWidth: 1.5, borderColor: '#888',
+    borderWidth: 1.5, borderColor: '#CCC',
   },
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
