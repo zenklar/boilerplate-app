@@ -74,46 +74,40 @@ function ArcadeCoin({ size = 48 }: { size?: number }) {
 type Pack = {
   id: string;
   label: string;
-  subtitle: string;
   coins: number;
-  tag?: string;
-  tagColor?: string;
+  price: string;
+  perCoin: string;
 };
 
 const PACKS: Pack[] = [
   {
-    id: 'starter',
-    label: 'Starter',
-    subtitle: '10 plays',
+    id: 'small',
+    label: 'Small Coin Pack',
     coins: 10,
+    price: '$0.99',
+    perCoin: '$0.099 / coin',
   },
   {
-    id: 'popular',
-    label: 'Popular',
-    subtitle: '100 plays',
+    id: 'medium',
+    label: 'Medium Coin Pack',
     coins: 100,
-    tag: 'MOST POPULAR',
-    tagColor: '#0A84FF',
+    price: '$9.99',
+    perCoin: '$0.099 / coin',
   },
   {
-    id: 'mega',
-    label: 'Mega Pack',
-    subtitle: '1000 plays',
+    id: 'large',
+    label: 'Large Coin Pack',
     coins: 1000,
-    tag: 'BEST VALUE',
-    tagColor: '#32D74B',
+    price: '$49.99',
+    perCoin: '$0.049 / coin',
   },
 ];
 
 /* ── Main screen ────────────────────────────────────────────────────── */
 export default function ShopScreen() {
   const { theme } = useTheme();
-  const coins = useCoinStore((s) => s.coins);
   const addCoins = useCoinStore((s) => s.addCoins);
-  const loadCoins = useCoinStore((s) => s.loadCoins);
   const [claimed, setClaimed] = useState<string | null>(null);
-
-  useEffect(() => { loadCoins(); }, []);
 
   const handleClaim = (pack: Pack) => {
     addCoins(pack.coins);
@@ -127,55 +121,23 @@ export default function ShopScreen() {
         contentContainerStyle={[st.scroll, { paddingBottom: theme.spacing.xxl }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Balance card ── */}
-        <View style={st.balanceSection}>
-          <View style={[st.balanceCard, {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.cardBorder,
-            shadowColor: '#FFD700',
-            ...(theme.mode === 'light' ? { shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 } : {}),
-          }]}>
-            <LinearGradient
-              colors={theme.mode === 'dark' ? ['#1A1400', '#0D0D0D'] : ['#FFFDE7', '#FFFFFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <ArcadeCoin size={52} />
-            <View style={st.balanceText}>
-              <Text style={[st.balanceLabel, { color: theme.colors.textMuted }]}>
-                Your Coins
-              </Text>
-              <Text style={[st.balanceValue, { color: '#FFD700' }]}>
-                {coins.toLocaleString()}
-              </Text>
-            </View>
-            <View style={[st.balanceInfo, { backgroundColor: theme.colors.backgroundSecondary, borderColor: theme.colors.border }]}>
-              <Ionicons name="information-circle-outline" size={14} color={theme.colors.textMuted} />
-              <Text style={[st.balanceInfoTxt, { color: theme.colors.textMuted }]}>
-                1 coin = 1 play
-              </Text>
-            </View>
-          </View>
-        </View>
-
         {/* ── Section header ── */}
         <Text style={[st.sectionTitle, { color: theme.colors.textMuted }]}>
           COIN PACKS
         </Text>
 
         {/* ── Pack cards ── */}
-        {PACKS.map((pack, idx) => {
+        {PACKS.map((pack) => {
           const isClaimed = claimed === pack.id;
-          const isPopular = !!pack.tag;
+          const isLarge = pack.id === 'large';
 
           return (
             <View
               key={pack.id}
               style={[st.packCard, {
                 backgroundColor: theme.colors.card,
-                borderColor: isPopular ? (pack.tagColor + '40') : theme.colors.cardBorder,
-                borderWidth: isPopular ? 1.5 : StyleSheet.hairlineWidth,
+                borderColor: isLarge ? '#FFD70055' : theme.colors.cardBorder,
+                borderWidth: isLarge ? 1.5 : StyleSheet.hairlineWidth,
                 ...(theme.mode === 'light' ? {
                   shadowColor: '#000',
                   shadowOffset: { width: 0, height: 1 },
@@ -185,13 +147,6 @@ export default function ShopScreen() {
                 } : {}),
               }]}
             >
-              {/* Tag badge */}
-              {pack.tag && (
-                <View style={[st.tagBadge, { backgroundColor: pack.tagColor }]}>
-                  <Text style={st.tagBadgeTxt}>{pack.tag}</Text>
-                </View>
-              )}
-
               <View style={st.packInner}>
                 {/* Info */}
                 <View style={st.packInfo}>
@@ -207,27 +162,27 @@ export default function ShopScreen() {
                       coins
                     </Text>
                   </View>
-                  <Text style={[st.packSubtitle, { color: theme.colors.textMuted }]}>
-                    {pack.subtitle}
+                  <Text style={[st.packPerCoin, { color: theme.colors.textMuted }]}>
+                    {pack.perCoin}
                   </Text>
                 </View>
 
-                {/* Claim button */}
+                {/* Buy button */}
                 <TouchableOpacity
                   onPress={() => handleClaim(pack)}
                   activeOpacity={0.8}
                   style={st.claimBtnWrap}
                 >
                   <LinearGradient
-                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : ['#43A047', '#2E7D32']}
+                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : isLarge ? ['#FFB300', '#F57F17'] : ['#43A047', '#2E7D32']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
                     style={st.claimBtn}
                   >
                     {isClaimed ? (
-                      <Ionicons name="checkmark" size={20} color="#FFF" />
+                      <Ionicons name="checkmark" size={18} color="#FFF" />
                     ) : (
-                      <Text style={st.claimBtnTxt}>Free</Text>
+                      <Text style={st.claimBtnTxt}>{pack.price}</Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -240,7 +195,7 @@ export default function ShopScreen() {
         <View style={st.footer}>
           <Ionicons name="storefront-outline" size={14} color={theme.colors.textMuted} />
           <Text style={[st.footerTxt, { color: theme.colors.textMuted }]}>
-            In-app purchases coming soon
+            Prices are for demonstration only
           </Text>
         </View>
       </ScrollView>
@@ -251,30 +206,6 @@ export default function ShopScreen() {
 const st = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingTop: 16 },
-
-  balanceSection: { paddingHorizontal: 16, marginBottom: 24 },
-  balanceCard: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    overflow: 'hidden',
-  },
-  balanceText: { flex: 1 },
-  balanceLabel: { fontSize: 12, fontWeight: '500', marginBottom: 2 },
-  balanceValue: { fontSize: 36, fontWeight: '800', letterSpacing: -1 },
-  balanceInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  balanceInfoTxt: { fontSize: 11, fontWeight: '500' },
 
   sectionTitle: {
     fontSize: 11, fontWeight: '600', letterSpacing: 0.5,
@@ -287,16 +218,6 @@ const st = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
-  tagBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    marginLeft: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  tagBadgeTxt: { color: '#FFF', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-
   packInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -308,7 +229,7 @@ const st = StyleSheet.create({
   packCoinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   packCoinCount: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   packCoinUnit: { fontSize: 12, fontWeight: '500', alignSelf: 'flex-end', marginBottom: 1 },
-  packSubtitle: { fontSize: 12, fontWeight: '400' },
+  packPerCoin: { fontSize: 11, fontWeight: '400' },
 
   claimBtnWrap: { borderRadius: 12, overflow: 'hidden' },
   claimBtn: {
@@ -316,7 +237,7 @@ const st = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 64,
+    minWidth: 72,
     minHeight: 44,
   },
   claimBtnTxt: { color: '#FFF', fontSize: 15, fontWeight: '700' },
