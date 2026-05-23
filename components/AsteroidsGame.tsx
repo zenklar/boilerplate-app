@@ -467,20 +467,13 @@ export default function AsteroidsGame() {
       pendingStart.current = false;
       initNewGame(width, gameH);
     } else if (!gsRef.current && width > 0 && height > 0) {
-      // First layout: build idle background
       gsRef.current = {
         phase: 'idle',
         sx: width / 2, sy: gameH / 2, svx: 0, svy: 0, sAngle: 0, sInv: 0,
-        bullets: [], particles: [],
-        asteroids: mkLevel(1, width, gameH, width / 2, gameH / 2),
+        bullets: [], particles: [], asteroids: [],
         score: 0, lives: 3, level: 1,
       };
       setTick((t) => t + 1);
-    } else if (gsRef.current?.phase === 'idle' && width > 0 && height > 0) {
-      // Returning to idle (after back-to-menu): refresh drifting asteroids
-      gsRef.current.asteroids = mkLevel(1, width, gameH, width / 2, gameH / 2);
-      gsRef.current.sx = width / 2;
-      gsRef.current.sy = gameH / 2;
     }
   };
 

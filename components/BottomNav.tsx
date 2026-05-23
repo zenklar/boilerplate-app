@@ -7,7 +7,7 @@ import { useTheme } from '../theme';
 
 type Tab = {
   label: string;
-  route: '/(app)/home' | '/(app)/ships' | '/(app)/settings';
+  route: '/(app)/home' | '/(app)/settings';
   segment: string;
   icon: keyof typeof Ionicons.glyphMap;
   iconFocused: keyof typeof Ionicons.glyphMap;
@@ -20,13 +20,6 @@ const TABS: Tab[] = [
     segment: '/home',
     icon: 'home-outline',
     iconFocused: 'home',
-  },
-  {
-    label: 'Ships',
-    route: '/(app)/ships',
-    segment: '/ships',
-    icon: 'rocket-outline',
-    iconFocused: 'rocket',
   },
   {
     label: 'Settings',
