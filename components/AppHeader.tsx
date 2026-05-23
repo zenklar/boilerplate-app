@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { APP_NAME, APP_ICON } from '../constants/social';
 import { useCoinStore } from '../store/coinStore';
+import ArcadeCoin from './ArcadeCoin';
 
 export default function AppHeader() {
   const { theme } = useTheme();
@@ -34,12 +34,11 @@ export default function AppHeader() {
           {APP_NAME}
         </Text>
 
-        {/* Coin balance pill — app-style, theme-aware */}
         <View style={[styles.coinPill, {
           backgroundColor: theme.colors.backgroundSecondary,
           borderColor: theme.colors.border,
         }]}>
-          <Ionicons name="logo-usd" size={13} color="#FFD700" />
+          <ArcadeCoin size={20} />
           <Text style={[styles.coinCount, { color: theme.colors.text }]}>
             {coins.toLocaleString()}
           </Text>
@@ -74,9 +73,9 @@ const styles = StyleSheet.create({
   coinPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
   },

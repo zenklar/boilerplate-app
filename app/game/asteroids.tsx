@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameUIStore } from '../../store/gameStore';
 import { useCoinStore } from '../../store/coinStore';
+import ArcadeCoin from '../../components/ArcadeCoin';
 import AsteroidsGame from '../../components/AsteroidsGame';
 import ShipSelectScreen from '../../components/ShipSelectScreen';
 import LeaderboardScreen from '../../components/LeaderboardScreen';
@@ -39,9 +40,7 @@ export default function AsteroidsPage() {
         <View style={[s.header, { paddingTop: insets.top }]}>
           <Text style={[s.headerTitle, { fontFamily: MONO }]}>{TAB_TITLES[tab]}</Text>
           <View style={s.coinCounter}>
-            <View style={s.coinIcon}>
-              <Text style={s.coinIconLetter}>C</Text>
-            </View>
+            <ArcadeCoin size={22} />
             <Text style={[s.coinCount, { fontFamily: MONO }]}>{coins}</Text>
           </View>
         </View>
@@ -122,13 +121,6 @@ const s = StyleSheet.create({
   coinCounter: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
   },
-  coinIcon: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#FFD700',
-    borderWidth: 1.5, borderColor: '#B8860B',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  coinIconLetter: { color: '#6B4500', fontSize: 9, fontWeight: '900' },
   coinCount: { color: '#FFD700', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
 
   content: { flex: 1 },
