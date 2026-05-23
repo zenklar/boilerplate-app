@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { APP_NAME, APP_ICON } from '../constants/social';
 import { useCoinStore } from '../store/coinStore';
@@ -33,10 +34,12 @@ export default function AppHeader() {
           {APP_NAME}
         </Text>
 
-        <View style={styles.coinPill}>
-          <View style={[styles.coinBadge, { borderColor: '#B8860B' }]}>
-            <Text style={styles.coinBadgeLetter}>C</Text>
-          </View>
+        {/* Coin balance pill — app-style, theme-aware */}
+        <View style={[styles.coinPill, {
+          backgroundColor: theme.colors.backgroundSecondary,
+          borderColor: theme.colors.border,
+        }]}>
+          <Ionicons name="logo-usd" size={13} color="#FFD700" />
           <Text style={[styles.coinCount, { color: theme.colors.text }]}>
             {coins.toLocaleString()}
           </Text>
@@ -71,14 +74,11 @@ const styles = StyleSheet.create({
   coinPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  coinBadge: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#FFD700',
-    borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  coinBadgeLetter: { color: '#6B4500', fontSize: 9, fontWeight: '900' },
-  coinCount: { fontSize: 14, fontWeight: '700' },
+  coinCount: { fontSize: 13, fontWeight: '600' },
 });

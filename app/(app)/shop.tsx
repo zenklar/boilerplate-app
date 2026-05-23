@@ -91,15 +91,15 @@ const PACKS: Pack[] = [
     id: 'medium',
     label: 'Medium Coin Pack',
     coins: 100,
-    price: '$9.99',
-    perCoin: '$0.099 / coin',
+    price: '$4.99',
+    perCoin: '$0.049 / coin  ·  2× better value',
   },
   {
     id: 'large',
     label: 'Large Coin Pack',
     coins: 1000,
-    price: '$49.99',
-    perCoin: '$0.049 / coin',
+    price: '$9.99',
+    perCoin: '$0.009 / coin  ·  10× better value',
   },
 ];
 
