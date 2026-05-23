@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   detailUnlock: { fontSize: 10, letterSpacing: 1 },
   detailRequire: { color: '#FF6D00', fontSize: 9, letterSpacing: 1 },
   detailNeed: { color: '#555', fontSize: 9, letterSpacing: 1 },
-  detailCount: { color: '#333', fontSize: 9, letterSpacing: 1, marginTop: 4 },
+  detailCount: { color: '#666', fontSize: 10, letterSpacing: 1, marginTop: 4 },
 
   scroll: { flex: 1 },
   grid: {

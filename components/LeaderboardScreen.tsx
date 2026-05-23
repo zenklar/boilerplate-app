@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   bestStar: { color: '#4FC3F7', fontSize: 32, opacity: 0.6 },
 
   sectionLabel: {
-    color: '#333', fontSize: 9, letterSpacing: 3,
+    color: '#666', fontSize: 10, letterSpacing: 3,
     marginBottom: 8, marginHorizontal: 2,
   },
 
@@ -128,12 +128,12 @@ const styles = StyleSheet.create({
     borderColor: '#2A2A2A',
   },
   rowRank: {
-    color: '#333', fontSize: 10, letterSpacing: 1,
+    color: '#666', fontSize: 10, letterSpacing: 1,
     width: 28,
   },
-  rowTopText: { color: '#555' },
+  rowTopText: { color: '#999' },
   rowScore: {
-    color: '#888', fontSize: 16, fontWeight: '700', letterSpacing: 1,
+    color: '#AAA', fontSize: 16, fontWeight: '700', letterSpacing: 1,
     width: 72,
   },
   rowTopScore: { color: '#FFF' },
@@ -141,11 +141,11 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', justifyContent: 'space-between',
   },
   rowStat: { color: '#DDD', fontSize: 10, letterSpacing: 0.5 },
-  rowStatLabel: { color: '#333', fontSize: 8 },
+  rowStatLabel: { color: '#777', fontSize: 8 },
 
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  emptyText: { color: '#222', fontSize: 13, letterSpacing: 4 },
-  emptyHint: { color: '#1A1A1A', fontSize: 9, letterSpacing: 2 },
+  emptyText: { color: '#555', fontSize: 13, letterSpacing: 4 },
+  emptyHint: { color: '#444', fontSize: 9, letterSpacing: 2 },
 });

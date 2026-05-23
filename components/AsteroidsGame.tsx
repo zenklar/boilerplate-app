@@ -763,7 +763,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
   },
   hudScore: { color: '#FFF', fontSize: 20, fontWeight: '700' },
-  hudHi: { color: '#555', fontSize: 13 },
+  hudHi: { color: '#888', fontSize: 13 },
   livesRow: {
     position: 'absolute', top: 44, left: 14,
     flexDirection: 'row', gap: 5,
@@ -773,14 +773,14 @@ const s = StyleSheet.create({
     position: 'absolute',
     bottom: CTRL_H + 10,
     right: 14,
-    color: '#444', fontSize: 12,
+    color: '#777', fontSize: 12,
   },
 
   webHint: {
     position: 'absolute', bottom: 10, left: 0, right: 0,
-    color: '#2A2A2A', fontSize: 11, textAlign: 'center',
+    color: '#666', fontSize: 11, textAlign: 'center',
   },
-  webIdleHint: { color: '#555', fontSize: 12, letterSpacing: 1 },
+  webIdleHint: { color: '#999', fontSize: 12, letterSpacing: 1 },
 
   // Title/idle overlay — transparent so drifting asteroids show through
   overlay: {
@@ -795,7 +795,7 @@ const s = StyleSheet.create({
   },
 
   titleText: { color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8 },
-  yearText: { color: '#444', fontSize: 14, letterSpacing: 2 },
+  yearText: { color: '#888', fontSize: 14, letterSpacing: 2 },
   hiLabel: { color: '#FFD700', fontSize: 14, letterSpacing: 1 },
   finalScore: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 6 },
   newHsText: { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },
@@ -814,8 +814,8 @@ const s = StyleSheet.create({
     minWidth: 130, alignItems: 'center',
   },
   goBtnTxt: { color: '#FFF', fontSize: 14, letterSpacing: 4 },
-  goBtnSecondary: { borderColor: '#444' },
-  goBtnSecondaryTxt: { color: '#666' },
+  goBtnSecondary: { borderColor: '#666' },
+  goBtnSecondaryTxt: { color: '#999' },
 
   /* Controls overlay */
   ctrlOverlay: {

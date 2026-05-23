@@ -51,7 +51,7 @@ export default function AsteroidsPage() {
               <Ionicons
                 name={tab === 'play' ? 'game-controller' : 'game-controller-outline'}
                 size={22}
-                color={tab === 'play' ? '#4FC3F7' : '#444'}
+                color={tab === 'play' ? '#4FC3F7' : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'play' && s.tabActive]}>
                 PLAY
@@ -62,7 +62,7 @@ export default function AsteroidsPage() {
               <Ionicons
                 name={tab === 'ships' ? 'rocket' : 'rocket-outline'}
                 size={22}
-                color={tab === 'ships' ? '#4FC3F7' : '#444'}
+                color={tab === 'ships' ? '#4FC3F7' : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'ships' && s.tabActive]}>
                 SHIPS
@@ -73,7 +73,7 @@ export default function AsteroidsPage() {
               <Ionicons
                 name={tab === 'leaderboard' ? 'trophy' : 'trophy-outline'}
                 size={22}
-                color={tab === 'leaderboard' ? '#4FC3F7' : '#444'}
+                color={tab === 'leaderboard' ? '#4FC3F7' : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'leaderboard' && s.tabActive]}>
                 SCORES
@@ -82,7 +82,7 @@ export default function AsteroidsPage() {
           </View>
 
           <Pressable style={s.exitBtn} onPress={() => router.replace('/(app)/home')}>
-            <Ionicons name="close-circle-outline" size={20} color="#444" />
+            <Ionicons name="close-circle-outline" size={20} color="#777" />
             <Text style={[s.exitLabel, { fontFamily: MONO }]}>EXIT</Text>
           </Pressable>
         </View>
@@ -120,12 +120,12 @@ const s = StyleSheet.create({
   },
   tabs: { flex: 1, flexDirection: 'row' },
   tab: { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
-  tabLabel: { color: '#444', fontSize: 9, letterSpacing: 2 },
+  tabLabel: { color: '#777', fontSize: 9, letterSpacing: 2 },
   tabActive: { color: '#4FC3F7' },
 
   exitBtn: {
     flexDirection: 'row', alignItems: 'center',
     gap: 5, paddingHorizontal: 14, paddingVertical: 8,
   },
-  exitLabel: { color: '#444', fontSize: 10, letterSpacing: 2 },
+  exitLabel: { color: '#777', fontSize: 10, letterSpacing: 2 },
 });
