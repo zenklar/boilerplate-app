@@ -3,7 +3,6 @@ import {
   View, Text, Image, StyleSheet, ScrollView,
   TouchableOpacity, useWindowDimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -90,23 +89,6 @@ export default function HomeScreen() {
         contentContainerStyle={[st.scroll, { paddingBottom: theme.spacing.xxl }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header section */}
-        <LinearGradient
-          colors={theme.gradients.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={st.heroBanner}
-        >
-          <View style={st.heroContent}>
-            <Text style={st.heroLabel}>ARCADE</Text>
-            <Text style={st.heroTitle}>Game Library</Text>
-            <Text style={st.heroSub}>Classic games reimagined for mobile</Text>
-          </View>
-          <View style={st.heroIcon}>
-            <Ionicons name="game-controller" size={52} color="rgba(255,255,255,0.25)" />
-          </View>
-        </LinearGradient>
-
         {/* Section header */}
         <View style={st.sectionHeader}>
           <Text style={[st.sectionTitle, { color: theme.colors.textMuted }]}>ALL GAMES</Text>
@@ -131,31 +113,6 @@ export default function HomeScreen() {
 const st = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingTop: 0 },
-
-  heroBanner: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 20,
-    borderRadius: 16,
-    padding: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  heroContent: { flex: 1 },
-  heroLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4,
-  },
-  heroTitle: {
-    color: '#FFF',
-    fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4,
-  },
-  heroSub: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12, fontWeight: '400',
-  },
-  heroIcon: { marginLeft: 12 },
 
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
