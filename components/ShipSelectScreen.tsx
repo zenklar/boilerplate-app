@@ -204,8 +204,8 @@ const styles = StyleSheet.create({
   cardLocked: { borderColor: '#111' },
   cardPressed: { opacity: 0.75 },
 
-  cardName: { color: '#888', fontSize: 6, letterSpacing: 1, textAlign: 'center' },
-  cardNameLocked: { color: '#2A2A2A' },
+  cardName: { color: '#EEE', fontSize: 9, letterSpacing: 1, textAlign: 'center' },
+  cardNameLocked: { color: '#444' },
 
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,

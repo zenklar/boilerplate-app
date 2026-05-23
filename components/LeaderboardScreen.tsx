@@ -27,7 +27,7 @@ function RunRow({ run, index }: { run: RunRecord; index: number }) {
           {run.bulletsShot} <Text style={styles.rowStatLabel}>SHOTS</Text>
         </Text>
         <Text style={[styles.rowStat, { fontFamily: MONO }]}>
-          {run.asteroidsDestroyed} <Text style={styles.rowStatLabel}>ROCKS</Text>
+          {run.asteroidsDestroyed} <Text style={styles.rowStatLabel}>ASTEROIDS</Text>
         </Text>
         <Text style={[styles.rowStat, { fontFamily: MONO }]}>
           {formatTime(run.durationMs)} <Text style={styles.rowStatLabel}>TIME</Text>
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', justifyContent: 'space-between',
   },
   rowStat: { color: '#DDD', fontSize: 10, letterSpacing: 0.5 },
-  rowStatLabel: { color: '#777', fontSize: 8 },
+  rowStatLabel: { color: '#4FC3F7', fontSize: 8 },
 
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8,
