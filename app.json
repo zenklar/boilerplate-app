@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "MY_APP_NAME",
+    "slug": "boilerplate-app",
+    "version": "1.0.0",
+    "scheme": "boilerplate-app",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.boilerplate"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.yourcompany.boilerplate"
+    },
+    "web": { "favicon": "./assets/favicon.png" },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true }
+  }
+}
