@@ -9,127 +9,86 @@ import { useSubscriptionStore } from '../../store/subscriptionStore';
 import ArcadeCoin from '../../components/ArcadeCoin';
 
 /* ── Subscription tile ──────────────────────────────────────────────── */
+const PERKS = [
+  'Unlimited coins — never pay per play',
+  'Early access to new games',
+  'VIP badge in leaderboards',
+];
+
 function SubscriptionTile() {
-  const { theme } = useTheme();
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const subscribe = useSubscriptionStore((s) => s.subscribe);
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);
-  const [claimed, setClaimed] = useState(false);
 
   const shimmer = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (isSubscribed) {
-      Animated.loop(
-        Animated.timing(shimmer, { toValue: 1, duration: 2600, useNativeDriver: true })
-      ).start();
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glow, { toValue: 1, duration: 1800, useNativeDriver: true }),
-          Animated.timing(glow, { toValue: 0, duration: 1800, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      shimmer.stopAnimation();
-      glow.stopAnimation();
-      shimmer.setValue(0);
-      glow.setValue(0);
-    }
+    if (!isSubscribed) { shimmer.setValue(0); glow.setValue(0); return; }
+    const shimAnim = Animated.loop(Animated.timing(shimmer, { toValue: 1, duration: 2600, useNativeDriver: true }));
+    const glowAnim = Animated.loop(Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0, duration: 1400, useNativeDriver: true }),
+    ]));
+    shimAnim.start(); glowAnim.start();
+    return () => { shimAnim.stop(); glowAnim.stop(); };
   }, [isSubscribed]);
 
-  const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-320, 420] });
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.9] });
-
-  const handlePress = () => {
-    if (isSubscribed) {
-      unsubscribe();
-    } else {
-      subscribe();
-      setClaimed(true);
-      setTimeout(() => setClaimed(false), 2200);
-    }
-  };
+  const shimTranslate = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-320, 420] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.9] });
 
   return (
-    <View style={[
-      st.subCard,
-      { borderColor: isSubscribed ? '#4FC3F780' : theme.colors.cardBorder },
-      isSubscribed && { borderWidth: 1.5 },
-    ]}>
+    <View style={st.subCard}>
       <LinearGradient
-        colors={isSubscribed
-          ? ['#0A1A4A', '#0D3080', '#0A1A4A']
-          : ['#0A0F20', '#0D1535', '#0A0F20']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        colors={isSubscribed ? ['#0A1A4A', '#0D3080', '#0A1A4A'] : ['#0A0F20', '#0D1535', '#0A0F20']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Animated shimmer sweep (active only) */}
       {isSubscribed && (
-        <Animated.View style={[st.shimmer, { transform: [{ translateX: shimmerX }] }]} />
+        <Animated.View pointerEvents="none" style={[st.shimmer, { transform: [{ translateX: shimTranslate }] }]} />
+      )}
+      {isSubscribed && (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }]} />
       )}
 
-      {/* Animated border glow (active only) */}
-      {isSubscribed && (
-        <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }]} />
-      )}
-
-      <View style={st.subInner}>
-        {/* Icon + status */}
-        <View style={st.subIconWrap}>
-          <LinearGradient
-            colors={isSubscribed ? ['#4FC3F7', '#1565C0'] : ['#1A2A5A', '#0D1B3A']}
-            style={st.subIconCircle}
-          >
-            <Ionicons
-              name={isSubscribed ? 'diamond' : 'diamond-outline'}
-              size={26}
-              color={isSubscribed ? '#FFF' : '#4FC3F7'}
-            />
-          </LinearGradient>
-          {isSubscribed && (
+      <View style={st.subTopRow}>
+        <View style={st.vipBadge}>
+          <Ionicons name="star" size={11} color="#FFD700" />
+          <Text style={st.vipBadgeTxt}>VIP</Text>
+        </View>
+        {isSubscribed && (
+          <View style={st.activePill}>
             <View style={st.activeDot} />
-          )}
-        </View>
-
-        {/* Text */}
-        <View style={st.subInfo}>
-          <View style={st.subTitleRow}>
-            <Text style={st.subTitle}>Arcade+</Text>
-            {isSubscribed && (
-              <View style={st.vipBadge}>
-                <Text style={st.vipBadgeTxt}>VIP</Text>
-              </View>
-            )}
+            <Text style={st.activeLabel}>ACTIVE</Text>
           </View>
-          <Text style={st.subDesc}>
-            {isSubscribed ? 'Unlimited coins · All games' : 'Unlimited coins for all games'}
-          </Text>
-          <Text style={st.subPrice}>
-            {isSubscribed ? 'Active subscription' : '$14.99 / month'}
-          </Text>
-        </View>
+        )}
+      </View>
 
-        {/* Button */}
-        <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={st.subBtnWrap}>
-          <LinearGradient
-            colors={isSubscribed
-              ? ['#B71C1C', '#7F0000']
-              : claimed
-              ? ['#2E7D32', '#1B5E20']
-              : ['#1565C0', '#0D47A1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={st.subBtn}
-          >
-            {claimed ? (
-              <Ionicons name="checkmark" size={18} color="#FFF" />
-            ) : (
-              <Text style={st.subBtnTxt}>{isSubscribed ? 'Cancel' : 'Free'}</Text>
-            )}
-          </LinearGradient>
+      <Text style={st.subTitle}>Arcade Pass</Text>
+      <Text style={st.subSubtitle}>Unlimited plays across all games</Text>
+
+      <View style={st.perksWrap}>
+        {PERKS.map((p) => (
+          <View key={p} style={st.perkRow}>
+            <Ionicons name="checkmark-circle" size={14} color="#4FC3F7" />
+            <Text style={st.perkText}>{p}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={st.subFooter}>
+        {!isSubscribed && (
+          <Text style={st.subPrice}>
+            <Text style={st.subPriceStrike}>$14.99/mo  </Text>
+            <Text style={st.subPriceFree}>FREE</Text>
+          </Text>
+        )}
+        <TouchableOpacity
+          onPress={isSubscribed ? unsubscribe : subscribe}
+          style={[st.subBtn, isSubscribed ? st.subBtnCancel : st.subBtnActivate]}
+          activeOpacity={0.8}
+        >
+          <Text style={st.subBtnTxt}>{isSubscribed ? 'Cancel Subscription' : 'Activate Free'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -243,58 +202,39 @@ const st = StyleSheet.create({
 
   /* Subscription card */
   subCard: {
-    marginHorizontal: 16,
-    marginBottom: 6,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    minHeight: 100,
+    marginHorizontal: 16, marginBottom: 6,
+    borderRadius: 18, overflow: 'hidden',
+    padding: 18,
   },
   shimmer: {
-    position: 'absolute', top: 0, bottom: 0,
-    width: 80,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    position: 'absolute', top: 0, bottom: 0, width: 80,
+    backgroundColor: 'rgba(255,255,255,0.09)',
     transform: [{ skewX: '-20deg' }],
   },
-  glowBorder: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#4FC3F7',
-  },
-  subInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 18,
-    gap: 14,
-  },
-  subIconWrap: { position: 'relative' },
-  subIconCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  activeDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: '#4CAF50',
-    borderWidth: 2, borderColor: '#0A1A4A',
-  },
-  subInfo: { flex: 1, gap: 3 },
-  subTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  subTitle: { color: '#FFF', fontSize: 19, fontWeight: '800', letterSpacing: -0.3 },
+  glowBorder: { borderRadius: 18, borderWidth: 1.5, borderColor: '#4FC3F7' },
+  subTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   vipBadge: {
-    backgroundColor: '#4FC3F7',
-    paddingHorizontal: 7, paddingVertical: 2,
-    borderRadius: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(255,215,0,0.15)', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)',
   },
-  vipBadgeTxt: { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  subDesc: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '400' },
-  subPrice: { color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: '400', marginTop: 2 },
-  subBtnWrap: { borderRadius: 12, overflow: 'hidden' },
-  subBtn: {
-    paddingHorizontal: 18, paddingVertical: 12,
-    alignItems: 'center', justifyContent: 'center',
-    minWidth: 68, minHeight: 44,
-  },
+  vipBadgeTxt: { color: '#FFD700', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  activePill: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4CAF50' },
+  activeLabel: { color: '#4CAF50', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3, marginBottom: 3 },
+  subSubtitle: { color: '#7EB8D4', fontSize: 13, marginBottom: 16 },
+  perksWrap: { gap: 8, marginBottom: 20 },
+  perkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  perkText: { color: '#B0D8EC', fontSize: 13 },
+  subFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
+  subPrice: {},
+  subPriceStrike: { color: '#5A7A8A', fontSize: 13, textDecorationLine: 'line-through' },
+  subPriceFree: { color: '#4FC3F7', fontSize: 20, fontWeight: '800' },
+  subBtn: { paddingHorizontal: 22, paddingVertical: 11, borderRadius: 24 },
+  subBtnActivate: { backgroundColor: '#4FC3F7' },
+  subBtnCancel: { backgroundColor: 'rgba(255,80,80,0.22)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.45)' },
   subBtnTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   /* Coin pack cards */
