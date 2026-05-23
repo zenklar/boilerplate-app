@@ -439,9 +439,13 @@ export default function AsteroidsGame() {
       thrustSoundRef.current.stop();
       thrustSoundRef.current = null;
     }
-    setIsGamePlaying(false); // header/nav reappear, onLayout will fire
-    if (gsRef.current) gsRef.current.phase = 'idle';
-    // Reset fire state so buttons don't get stuck
+    setIsGamePlaying(false);
+    if (gsRef.current) {
+      gsRef.current.phase = 'idle';
+      gsRef.current.asteroids = [];
+      gsRef.current.bullets = [];
+      gsRef.current.particles = [];
+    }
     ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
     joyActive.current = false;
     joyOff.current = { x: 0, y: 0 };
