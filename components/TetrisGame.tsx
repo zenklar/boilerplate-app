@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Platform, LayoutChangeEvent, Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTetrisStore } from '../store/tetrisStore';
 import { useCoinStore } from '../store/coinStore';
@@ -14,25 +13,57 @@ import {
 } from '../constants/tetris';
 import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed } from '../utils/sounds';
 
-/** Classic arcade-style block: base color with a top-left light wash and a
- *  bottom-right dark shadow on top of a hard black border. */
+/** Classic arcade-style block: base color with light highlight bands on the
+ *  top/left, dark shadow bands on the bottom/right, and a hard black border.
+ *  Pure View-based — cheaper than LinearGradient when rendering 50+ cells. */
 function PixelBlock({ size, color }: { size: number; color: string }) {
+  const band = Math.max(2, Math.floor(size * 0.18));
   return (
     <View style={{ width: size, height: size, backgroundColor: color }}>
-      <LinearGradient
-        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)', 'rgba(0,0,0,0.4)']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill as any}
-      />
+      <View style={{
+        position: 'absolute', left: 0, top: 0, right: 0, height: band,
+        backgroundColor: 'rgba(255,255,255,0.42)',
+      }} />
+      <View style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: band,
+        backgroundColor: 'rgba(255,255,255,0.22)',
+      }} />
+      <View style={{
+        position: 'absolute', left: 0, bottom: 0, right: 0, height: band,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+      }} />
+      <View style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: band,
+        backgroundColor: 'rgba(0,0,0,0.22)',
+      }} />
       <View style={{
         position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
-        borderWidth: 1, borderColor: 'rgba(0,0,0,0.65)',
+        borderWidth: 1, borderColor: 'rgba(0,0,0,0.7)',
       }} />
     </View>
   );
 }
+
+const BoardGrid = React.memo(function BoardGrid({ cell }: { cell: number }) {
+  const lines: React.ReactNode[] = [];
+  for (let x = 1; x < BOARD_W; x++) {
+    lines.push(
+      <View key={`v${x}`} style={{
+        position: 'absolute', left: x * cell, top: 0,
+        width: 1, height: BOARD_H * cell, backgroundColor: '#101010',
+      }} />
+    );
+  }
+  for (let y = 1; y < BOARD_H; y++) {
+    lines.push(
+      <View key={`h${y}`} style={{
+        position: 'absolute', left: 0, top: y * cell,
+        width: BOARD_W * cell, height: 1, backgroundColor: '#101010',
+      }} />
+    );
+  }
+  return <>{lines}</>;
+});
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
@@ -360,15 +391,22 @@ export default function TetrisGame() {
           }
         }
       } else if (Platform.OS === 'web' && mouseTargetX.current !== null) {
-        // Player steering: step the piece toward the mouse column. We use
-        // the piece's CENTER column so the cursor stays roughly over it.
-        const a = g.active;
-        const m = shape(a);
-        const w = m[0].length;
-        const centerCol = a.x + Math.floor((w - 1) / 2);
-        const want = mouseTargetX.current;
-        if (centerCol < want) tryMove(1, 0);
-        else if (centerCol > want) tryMove(-1, 0);
+        // Player steering: snap the piece toward the mouse column this
+        // very frame — keep stepping until aligned, blocked, or out of
+        // safety budget. Makes mouse control feel instant rather than
+        // 1-cell-per-tick laggy.
+        let safety = BOARD_W + 2;
+        while (safety-- > 0) {
+          const a = g.active;
+          if (!a) break;
+          const m = shape(a);
+          const w = m[0].length;
+          const center = a.x + Math.floor((w - 1) / 2);
+          const want = mouseTargetX.current;
+          if (want == null || center === want) break;
+          const dir = center < want ? 1 : -1;
+          if (!tryMove(dir, 0)) break;
+        }
       }
 
       const gravity = isDemo ? DEMO_GRAVITY : DROP_FRAMES_PER_LEVEL(g.level);
@@ -470,11 +508,21 @@ export default function TetrisGame() {
 
   function tryRotate(dir: 1 | -1) {
     const g = gsRef.current; if (!g || !g.active) return;
-    const rots = TETROMINOS[g.active.type].length;
+    const type = g.active.type;
+    const rots = TETROMINOS[type].length;
     const nextRot = (g.active.rot + dir + rots) % rots;
-    // Simple wall kicks: try original, then ±1, then ±2 columns
+    // Shift x so the new bounding box stays visually centered over the old
+    // one. Without this, e.g. an L-piece "snaps" to one side on every
+    // rotation because the shape width changes.
+    const oldW = TETROMINOS[type][g.active.rot][0].length;
+    const newW = TETROMINOS[type][nextRot][0].length;
+    const centerShift = Math.floor((oldW - newW) / 2);
     for (const kick of [0, -1, 1, -2, 2]) {
-      const candidate = { ...g.active, rot: nextRot, x: g.active.x + kick };
+      const candidate = {
+        ...g.active,
+        rot: nextRot,
+        x: g.active.x + centerShift + kick,
+      };
       if (!collides(g.board, candidate)) {
         g.active = candidate;
         g.lockTimer = 0;
@@ -684,23 +732,8 @@ export default function TetrisGame() {
           }}
           style={[s.board, { width: boardPxW, height: boardPxH }]}
         >
-          {/* Empty-cell grid (background) */}
-          {Array.from({ length: BOARD_H * BOARD_W }).map((_, i) => {
-            const y = Math.floor(i / BOARD_W);
-            const x = i % BOARD_W;
-            return (
-              <View
-                key={`bg-${i}`}
-                style={{
-                  position: 'absolute',
-                  left: x * CELL, top: y * CELL,
-                  width: CELL, height: CELL,
-                  borderWidth: 1, borderColor: '#101010',
-                  backgroundColor: '#060606',
-                }}
-              />
-            );
-          })}
+          {/* Grid lines — 10 verticals + 20 horizontals beats 200 cells */}
+          <BoardGrid cell={CELL} />
           {/* Ghost piece outline */}
           {ghostCells && ghostCells.map((row, y) => row.map((on, x) => on && !(displayCells && displayCells[y][x]) ? (
             <View key={`gh-${y}-${x}`} style={{
