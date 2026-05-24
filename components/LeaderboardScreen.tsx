@@ -71,9 +71,7 @@ export default function LeaderboardScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <Text style={[styles.sectionLabel, { fontFamily: MONO }]}>
-            LAST {runs.length} RUN{runs.length !== 1 ? 'S' : ''}
-          </Text>
+          <Text style={[styles.sectionLabel, { fontFamily: MONO }]}>RECENT RUNS</Text>
           {runs.map((run, i) => (
             <RunRow key={run.id} run={run} index={i} />
           ))}
@@ -87,21 +85,14 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
 
   bestCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    margin: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: '#0A1520',
-    borderWidth: 1.5,
-    borderColor: '#4FC3F7',
-    borderRadius: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 24, paddingVertical: 20,
+    borderBottomWidth: 1, borderBottomColor: '#1A1A1A',
   },
   bestLeft: { gap: 4 },
-  bestLabel: { color: '#4FC3F7', fontSize: 9, letterSpacing: 3 },
-  bestScore: { color: '#FFF', fontSize: 36, fontWeight: '700', letterSpacing: 2 },
-  bestStar: { color: '#4FC3F7', fontSize: 32, opacity: 0.6 },
+  bestLabel: { color: '#777', fontSize: 11, letterSpacing: 3 },
+  bestScore: { color: '#FFD700', fontSize: 32, fontWeight: '800', letterSpacing: 2 },
+  bestStar: { color: '#FFD700', fontSize: 40 },
 
   sectionLabel: {
     color: '#666', fontSize: 10, letterSpacing: 3,
@@ -141,7 +132,7 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: 'row', justifyContent: 'space-between',
   },
   rowStat: { color: '#DDD', fontSize: 10, letterSpacing: 0.5 },
-  rowStatLabel: { color: '#4FC3F7', fontSize: 8 },
+  rowStatLabel: { color: '#FFD700', fontSize: 8 },
 
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8,

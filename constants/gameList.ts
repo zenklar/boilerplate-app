@@ -32,4 +32,14 @@ export const GAME_LIST: GameEntry[] = [
     accentColor: '#4DD8FF',
     image: require('../assets/games/tetris.png'),
   },
+  {
+    id: 'snake',
+    title: 'Snake',
+    year: '1997',
+    genre: 'Arcade',
+    available: true,
+    route: '/game/snake',
+    accentColor: '#4ED31F',
+    image: require('../assets/games/snake.png'),
+  },
 ];

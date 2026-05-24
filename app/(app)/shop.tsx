@@ -40,13 +40,19 @@ function SubscriptionTile() {
   return (
     <View style={st.subCard}>
       <LinearGradient
-        colors={isSubscribed ? ['#0A1A4A', '#0D3080', '#0A1A4A'] : ['#0A0F20', '#0D1535', '#0A0F20']}
+        colors={isSubscribed ? ['#0E0530', '#2D0B6E', '#1A0850', '#3B1268', '#0A0828'] : ['#080420', '#160840', '#0C0635', '#1A0A48', '#080420']}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       {isSubscribed && (
         <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }] }, { pointerEvents: 'none' }]} />
       )}
+      <LinearGradient
+        colors={['transparent', 'rgba(192,80,255,0.12)', 'transparent']}
+        start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       {isSubscribed && (
         <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }, { pointerEvents: 'none' }]} />
       )}
@@ -70,7 +76,7 @@ function SubscriptionTile() {
       <View style={st.perksWrap}>
         {PERKS.map((p) => (
           <View key={p} style={st.perkRow}>
-            <Ionicons name="checkmark-circle" size={14} color="#4FC3F7" />
+            <Ionicons name="checkmark-circle" size={14} color="#E040FB" />
             <Text style={st.perkText}>{p}</Text>
           </View>
         ))}
@@ -79,8 +85,7 @@ function SubscriptionTile() {
       <View style={st.subFooter}>
         {!isSubscribed && (
           <Text style={st.subPrice}>
-            <Text style={st.subPriceStrike}>$14.99/mo  </Text>
-            <Text style={st.subPriceFree}>FREE</Text>
+            <Text style={st.subPriceAmt}>$14.99/mo</Text>
           </Text>
         )}
         <TouchableOpacity
@@ -88,7 +93,7 @@ function SubscriptionTile() {
           style={[st.subBtn, isSubscribed ? st.subBtnCancel : st.subBtnActivate]}
           activeOpacity={0.8}
         >
-          <Text style={st.subBtnTxt}>{isSubscribed ? 'Cancel Subscription' : 'Activate Free'}</Text>
+          <Text style={st.subBtnTxt}>{isSubscribed ? 'Cancel Subscription' : 'Activate'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -101,7 +106,7 @@ type Pack = { id: string; label: string; coins: number; price: string; perCoin: 
 const PACKS: Pack[] = [
   { id: 'small',  label: 'Small Coin Pack',  coins: 10,   price: '$0.99', perCoin: '$0.099 / coin' },
   { id: 'medium', label: 'Medium Coin Pack', coins: 100,  price: '$4.99', perCoin: '$0.049 / coin  ·  2× better value' },
-  { id: 'large',  label: 'Large Coin Pack',  coins: 1000, price: '$9.99', perCoin: '$0.009 / coin  ·  10× better value' },
+  { id: 'large',  label: 'Large Coin Pack',  coins: 500, price: '$9.99', perCoin: '$0.019 / coin  ·  5× better value' },
 ];
 
 /* ── Main screen ────────────────────────────────────────────────────── */
@@ -205,13 +210,14 @@ const st = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 6,
     borderRadius: 18, overflow: 'hidden',
     padding: 18,
+    borderWidth: 1, borderColor: 'rgba(160, 80, 255, 0.4)',
   },
   shimmer: {
-    position: 'absolute', top: 0, bottom: 0, width: 80,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    position: 'absolute', top: 0, bottom: 0, width: 100,
+    backgroundColor: 'rgba(220,120,255,0.10)',
     transform: [{ skewX: '-20deg' }],
   },
-  glowBorder: { borderRadius: 18, borderWidth: 1.5, borderColor: '#4FC3F7' },
+  glowBorder: { borderRadius: 18, borderWidth: 1.5, borderColor: '#D946EF' },
   subTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   vipBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -224,16 +230,15 @@ const st = StyleSheet.create({
   activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4CAF50' },
   activeLabel: { color: '#4CAF50', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3, marginBottom: 3 },
-  subSubtitle: { color: '#7EB8D4', fontSize: 13, marginBottom: 16 },
+  subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 16 },
   perksWrap: { gap: 8, marginBottom: 20 },
   perkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  perkText: { color: '#B0D8EC', fontSize: 13 },
+  perkText: { color: '#CDB8E8', fontSize: 13 },
   subFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
   subPrice: {},
-  subPriceStrike: { color: '#5A7A8A', fontSize: 13, textDecorationLine: 'line-through' },
-  subPriceFree: { color: '#4FC3F7', fontSize: 20, fontWeight: '800' },
+  subPriceAmt: { color: '#EEE', fontSize: 18, fontWeight: '700' },
   subBtn: { paddingHorizontal: 22, paddingVertical: 11, borderRadius: 24 },
-  subBtnActivate: { backgroundColor: '#4FC3F7' },
+  subBtnActivate: { backgroundColor: '#8B21E8' },
   subBtnCancel: { backgroundColor: 'rgba(255,80,80,0.22)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.45)' },
   subBtnTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 

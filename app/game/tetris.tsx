@@ -55,7 +55,7 @@ export default function TetrisPage() {
               <Ionicons
                 name={tab === 'play' ? 'game-controller' : 'game-controller-outline'}
                 size={22}
-                color={tab === 'play' ? '#4FC3F7' : '#777'}
+                color={tab === 'play' ? '#FFD700' : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'play' && s.tabActive]}>
                 PLAY
@@ -66,7 +66,7 @@ export default function TetrisPage() {
               <Ionicons
                 name={tab === 'leaderboard' ? 'trophy' : 'trophy-outline'}
                 size={22}
-                color={tab === 'leaderboard' ? '#4FC3F7' : '#777'}
+                color={tab === 'leaderboard' ? '#FFD700' : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'leaderboard' && s.tabActive]}>
                 SCORES
@@ -113,7 +113,7 @@ const s = StyleSheet.create({
   tabs: { flex: 1, flexDirection: 'row' },
   tab: { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
   tabLabel: { color: '#777', fontSize: 9, letterSpacing: 2 },
-  tabActive: { color: '#4FC3F7' },
+  tabActive: { color: '#FFD700' },
 
   exitBtn: {
     flexDirection: 'row', alignItems: 'center',

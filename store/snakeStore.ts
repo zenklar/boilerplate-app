@@ -1,30 +1,30 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const HIGH_SCORE_KEY = '@tetris/high_score';
-const RUNS_KEY = '@tetris/runs';
+const HIGH_SCORE_KEY = '@snake/high_score';
+const RUNS_KEY = '@snake/runs';
 
-export type TetrisRun = {
+export type SnakeRun = {
   id: string;
   score: number;
-  lines: number;
+  foodEaten: number;
   level: number;
   durationMs: number;
   date: number;
 };
 
-type TetrisStore = {
+type SnakeStore = {
   isGamePlaying: boolean;
   setIsGamePlaying: (v: boolean) => void;
   highScore: number;
   updateHighScore: (score: number) => void;
   loadHighScore: () => Promise<void>;
-  runs: TetrisRun[];
-  addRun: (run: TetrisRun) => void;
+  runs: SnakeRun[];
+  addRun: (run: SnakeRun) => void;
   loadRuns: () => Promise<void>;
 };
 
-export const useTetrisStore = create<TetrisStore>((set, get) => ({
+export const useSnakeStore = create<SnakeStore>((set, get) => ({
   isGamePlaying: false,
   setIsGamePlaying: (v) => set({ isGamePlaying: v }),
 

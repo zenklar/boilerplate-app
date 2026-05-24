@@ -26,7 +26,7 @@ import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdow
 const TICK_MS = 16;
 const SHIP_SIZE = 44;
 const ENEMY_BULLET_SPEED_BASE = 5.0;
-const BULLET_SPEED = ENEMY_BULLET_SPEED_BASE * 1.1;
+const BULLET_SPEED = ENEMY_BULLET_SPEED_BASE * 1.32;
 const BULLET_LEN = 14;
 const BULLET_W = 3;
 const BULLET_LIFETIME = 95;

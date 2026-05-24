@@ -3,33 +3,30 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useGameUIStore } from '../../store/gameStore';
+import { useSnakeStore } from '../../store/snakeStore';
 import { useCoinStore } from '../../store/coinStore';
 import ArcadeCoin from '../../components/ArcadeCoin';
-import AsteroidsGame from '../../components/AsteroidsGame';
-import ShipSelectScreen from '../../components/ShipSelectScreen';
-import LeaderboardScreen from '../../components/LeaderboardScreen';
-import EnemyCodexScreen from '../../components/EnemyCodexScreen';
+import SnakeGame from '../../components/SnakeGame';
+import SnakeLeaderboardScreen from '../../components/SnakeLeaderboardScreen';
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const ACCENT = '#FFD700';
 
-type Tab = 'play' | 'ships' | 'enemies' | 'leaderboard';
+type Tab = 'play' | 'leaderboard';
 
 const HEADER_H = 52;
 
 const TAB_TITLES: Record<Tab, string> = {
-  play: 'ASTEROIDS',
-  ships: 'SELECT SHIP',
-  enemies: 'ENEMY CODEX',
+  play: 'SNAKE',
   leaderboard: 'LEADERBOARD',
 };
 
-export default function AsteroidsPage() {
+export default function SnakePage() {
   const [tab, setTab] = useState<Tab>('play');
-  const isGamePlaying = useGameUIStore((s) => s.isGamePlaying);
-  const coins = useCoinStore((s) => s.coins);
+  const isGamePlaying = useSnakeStore((s) => s.isGamePlaying);
+  const coins     = useCoinStore((s) => s.coins);
   const loadCoins = useCoinStore((s) => s.loadCoins);
-  const insets = useSafeAreaInsets();
+  const insets    = useSafeAreaInsets();
 
   useEffect(() => { loadCoins(); }, []);
 
@@ -37,7 +34,6 @@ export default function AsteroidsPage() {
 
   return (
     <View style={s.root}>
-      {/* ── Fixed header — always the same height, hidden during play ── */}
       {chrome && (
         <View style={[s.header, { paddingTop: insets.top }]}>
           <Text style={[s.headerTitle, { fontFamily: MONO }]}>{TAB_TITLES[tab]}</Text>
@@ -48,15 +44,11 @@ export default function AsteroidsPage() {
         </View>
       )}
 
-      {/* ── Tab content ── */}
       <View style={s.content}>
-        {tab === 'play'        && <AsteroidsGame />}
-        {tab === 'ships'       && <ShipSelectScreen />}
-        {tab === 'enemies'     && <EnemyCodexScreen />}
-        {tab === 'leaderboard' && <LeaderboardScreen />}
+        {tab === 'play'        && <SnakeGame />}
+        {tab === 'leaderboard' && <SnakeLeaderboardScreen />}
       </View>
 
-      {/* ── Game bottom bar — hidden during active play ── */}
       {chrome && (
         <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <View style={s.tabs}>
@@ -64,32 +56,10 @@ export default function AsteroidsPage() {
               <Ionicons
                 name={tab === 'play' ? 'game-controller' : 'game-controller-outline'}
                 size={22}
-                color={tab === 'play' ? '#FFD700' : '#777'}
+                color={tab === 'play' ? ACCENT : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'play' && s.tabActive]}>
                 PLAY
-              </Text>
-            </Pressable>
-
-            <Pressable style={s.tab} onPress={() => setTab('ships')}>
-              <Ionicons
-                name={tab === 'ships' ? 'rocket' : 'rocket-outline'}
-                size={22}
-                color={tab === 'ships' ? '#FFD700' : '#777'}
-              />
-              <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'ships' && s.tabActive]}>
-                SHIPS
-              </Text>
-            </Pressable>
-
-            <Pressable style={s.tab} onPress={() => setTab('enemies')}>
-              <Ionicons
-                name={tab === 'enemies' ? 'skull' : 'skull-outline'}
-                size={22}
-                color={tab === 'enemies' ? '#FFD700' : '#777'}
-              />
-              <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'enemies' && s.tabActive]}>
-                ENEMIES
               </Text>
             </Pressable>
 
@@ -97,7 +67,7 @@ export default function AsteroidsPage() {
               <Ionicons
                 name={tab === 'leaderboard' ? 'trophy' : 'trophy-outline'}
                 size={22}
-                color={tab === 'leaderboard' ? '#FFD700' : '#777'}
+                color={tab === 'leaderboard' ? ACCENT : '#777'}
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'leaderboard' && s.tabActive]}>
                 SCORES
@@ -129,29 +99,22 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#1A1A1A',
   },
-  headerTitle: {
-    color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 5,
-  },
-  coinCounter: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-  },
-  coinCount: { color: '#FFD700', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  headerTitle:  { color: '#FFF', fontSize: 16, fontWeight: '700', letterSpacing: 5 },
+  coinCounter:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  coinCount:    { color: '#FFD700', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
 
   content: { flex: 1 },
 
   bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#080808',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1A1A1A',
-    paddingTop: 6,
-    paddingHorizontal: 8,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1A1A1A',
+    paddingTop: 6, paddingHorizontal: 8,
   },
-  tabs: { flex: 1, flexDirection: 'row' },
-  tab: { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
+  tabs:     { flex: 1, flexDirection: 'row' },
+  tab:      { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
   tabLabel: { color: '#777', fontSize: 9, letterSpacing: 2 },
-  tabActive: { color: '#FFD700' },
+  tabActive: { color: ACCENT },
 
   exitBtn: {
     flexDirection: 'row', alignItems: 'center',
