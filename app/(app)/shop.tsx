@@ -45,10 +45,10 @@ function SubscriptionTile() {
         style={StyleSheet.absoluteFill}
       />
       {isSubscribed && (
-        <Animated.View pointerEvents="none" style={[st.shimmer, { transform: [{ translateX: shimTranslate }] }]} />
+        <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }] }, { pointerEvents: 'none' }]} />
       )}
       {isSubscribed && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }]} />
+        <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }, { pointerEvents: 'none' }]} />
       )}
 
       <View style={st.subTopRow}>

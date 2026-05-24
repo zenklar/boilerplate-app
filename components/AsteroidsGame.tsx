@@ -824,7 +824,7 @@ export default function AsteroidsGame() {
 
         {/* ── Coin insert animation overlay ── */}
         {insertPhase === 'coinanim' && (
-          <View style={s.insertOverlay} pointerEvents="none">
+          <View style={s.insertOverlay}>
             <Animated.View
               style={[
                 s.fallingCoin,
@@ -845,7 +845,7 @@ export default function AsteroidsGame() {
 
         {/* ── Countdown overlay ── */}
         {insertPhase === 'countdown' && (
-          <View style={s.countdownOverlay} pointerEvents="none">
+          <View style={s.countdownOverlay}>
             <Animated.Text
               style={[
                 s.countdownText,
@@ -1040,10 +1040,11 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
+    pointerEvents: 'none',
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
-    textShadowColor: '#FFD700', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24,
+    textShadow: '0px 0px 24px #FFD700',
   },
 
   /* Controls overlay */
