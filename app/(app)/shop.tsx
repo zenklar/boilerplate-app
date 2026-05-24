@@ -10,9 +10,9 @@ import ArcadeCoin from '../../components/ArcadeCoin';
 
 /* ── Subscription tile ──────────────────────────────────────────────── */
 const PERKS = [
-  'Unlimited coins — never pay per play',
   'Early access to new games',
   'VIP badge in leaderboards',
+  'Exclusive seasonal events',
 ];
 
 /* Floating sparkle particle */
@@ -130,32 +130,36 @@ function SubscriptionTile() {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Sharp angular accents on inactive (purple) state */}
-        {!isSubscribed && (
-          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-            <View style={[st.angleShape, st.angleA]}>
-              <LinearGradient
-                colors={['rgba(217,70,239,0.45)', 'rgba(168,85,247,0.0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
-            <View style={[st.angleShape, st.angleB]}>
-              <LinearGradient
-                colors={['rgba(124,58,237,0.0)', 'rgba(236,72,153,0.4)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
-            <View style={[st.angleShape, st.angleC]}>
-              <LinearGradient
-                colors={['rgba(192,132,252,0.35)', 'rgba(192,132,252,0.0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
+        {/* Sharp angular accents — both states */}
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <View style={[st.angleShape, st.angleA]}>
+            <LinearGradient
+              colors={isSubscribed
+                ? ['rgba(255,215,0,0.55)', 'rgba(255,170,40,0.0)']
+                : ['rgba(217,70,239,0.45)', 'rgba(168,85,247,0.0)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
           </View>
-        )}
+          <View style={[st.angleShape, st.angleB]}>
+            <LinearGradient
+              colors={isSubscribed
+                ? ['rgba(255,140,0,0.0)', 'rgba(255,200,60,0.55)']
+                : ['rgba(124,58,237,0.0)', 'rgba(236,72,153,0.4)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+          <View style={[st.angleShape, st.angleC]}>
+            <LinearGradient
+              colors={isSubscribed
+                ? ['rgba(255,240,160,0.45)', 'rgba(255,240,160,0.0)']
+                : ['rgba(192,132,252,0.35)', 'rgba(192,132,252,0.0)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+        </View>
 
         {/* Diagonal grid scanlines for arcade feel */}
         {isSubscribed && (
@@ -201,12 +205,17 @@ function SubscriptionTile() {
         {/* Floating sparkles */}
         {isSubscribed ? (
           <>
-            <Sparkle delay={0}    left={28}  top={18}  size={11} />
-            <Sparkle delay={600}  left={210} top={36}  size={9}  />
-            <Sparkle delay={1200} left={150} top={84}  size={13} />
-            <Sparkle delay={400}  left={300} top={110} size={10} />
-            <Sparkle delay={1500} left={60}  top={150} size={8}  />
-            <Sparkle delay={900}  left={260} top={170} size={11} />
+            <Sparkle delay={0}    left={28}  top={18}  size={12} color="#FFE066" />
+            <Sparkle delay={600}  left={210} top={30}  size={10} color="#FFFFFF" icon="star" />
+            <Sparkle delay={1200} left={150} top={84}  size={14} color="#FFD700" />
+            <Sparkle delay={400}  left={300} top={110} size={11} color="#FFE066" icon="star" />
+            <Sparkle delay={1500} left={60}  top={150} size={9}  color="#FFFFFF" icon="star" />
+            <Sparkle delay={900}  left={260} top={170} size={12} color="#FFD700" />
+            <Sparkle delay={200}  left={120} top={40}  size={8}  color="#FFF4D1" icon="star" />
+            <Sparkle delay={1700} left={330} top={50}  size={9}  color="#FFE066" />
+            <Sparkle delay={800}  left={190} top={195} size={10} color="#FFD700" icon="star" />
+            <Sparkle delay={1100} left={90}  top={100} size={7}  color="#FFFFFF" icon="star" />
+            <Sparkle delay={2000} left={280} top={150} size={8}  color="#FFE066" icon="star" />
           </>
         ) : (
           <>
@@ -252,8 +261,36 @@ function SubscriptionTile() {
           )}
         </View>
         <Text style={[st.subSubtitle, isSubscribed && { color: '#FFE9A8' }]}>
-          {isSubscribed ? '✨ Unlimited plays unlocked' : 'Unlimited plays across all games'}
+          {isSubscribed ? 'All games. Always unlocked.' : 'Play unlimited. Never pay per game.'}
         </Text>
+
+        {/* Hero: Unlimited Coins — the big selling point */}
+        <View style={[st.heroBanner, isSubscribed ? st.heroBannerActive : st.heroBannerInactive]}>
+          <LinearGradient
+            colors={isSubscribed
+              ? ['rgba(255,215,0,0.28)', 'rgba(255,170,40,0.18)', 'rgba(255,215,0,0.28)']
+              : ['rgba(217,70,239,0.25)', 'rgba(168,85,247,0.18)', 'rgba(236,72,153,0.25)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={st.heroCoinWrap}>
+            <ArcadeCoin size={36} />
+            <Animated.View
+              style={[
+                st.heroInfinityBubble,
+                isSubscribed && { transform: [{ scale: badgeScale }] },
+              ]}
+            >
+              <Text style={[st.heroInfinity, isSubscribed && st.heroInfinityActive]}>∞</Text>
+            </Animated.View>
+          </View>
+          <View style={st.heroTextWrap}>
+            <Text style={[st.heroTitle, isSubscribed && st.heroTitleActive]}>Unlimited Coins</Text>
+            <Text style={[st.heroSubtitle, isSubscribed && { color: '#FFF4D1' }]}>
+              Never pay per play — every game, free forever
+            </Text>
+          </View>
+        </View>
 
         <View style={st.perksWrap}>
           {PERKS.map((p) => (
@@ -500,7 +537,53 @@ const st = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
   },
-  subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 16 },
+  subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 14 },
+
+  heroBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 14, padding: 12, marginBottom: 14,
+    borderWidth: 1, overflow: 'hidden',
+  },
+  heroBannerInactive: {
+    borderColor: 'rgba(217,70,239,0.55)',
+  },
+  heroBannerActive: {
+    borderColor: 'rgba(255,215,0,0.85)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  heroCoinWrap: { position: 'relative', width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  heroInfinityBubble: {
+    position: 'absolute',
+    right: -8, bottom: -8,
+    backgroundColor: '#0E0A02',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  heroInfinity: {
+    color: '#FFF', fontSize: 14, fontWeight: '900', lineHeight: 16, textAlign: 'center',
+  },
+  heroInfinityActive: {
+    color: '#FFD700',
+    textShadowColor: 'rgba(255,215,0,0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  heroTextWrap: { flex: 1 },
+  heroTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
+  heroTitleActive: {
+    color: '#FFF6D1',
+    textShadowColor: 'rgba(255,215,0,0.85)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  heroSubtitle: { color: '#E9D5FF', fontSize: 11, marginTop: 2 },
   perksWrap: { gap: 8, marginBottom: 20 },
   perkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   perkText: { color: '#CDB8E8', fontSize: 13 },

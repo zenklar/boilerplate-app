@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTetrisStore } from '../../store/tetrisStore';
 import { useCoinStore } from '../../store/coinStore';
+import { useSubscriptionStore } from '../../store/subscriptionStore';
 import ArcadeCoin from '../../components/ArcadeCoin';
 import TetrisGame from '../../components/TetrisGame';
 import TetrisLeaderboardScreen from '../../components/TetrisLeaderboardScreen';
@@ -25,9 +26,11 @@ export default function TetrisPage() {
   const isGamePlaying = useTetrisStore((s) => s.isGamePlaying);
   const coins = useCoinStore((s) => s.coins);
   const loadCoins = useCoinStore((s) => s.loadCoins);
+  const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
+  const loadSubscription = useSubscriptionStore((s) => s.loadSubscription);
   const insets = useSafeAreaInsets();
 
-  useEffect(() => { loadCoins(); }, []);
+  useEffect(() => { loadCoins(); loadSubscription(); }, []);
 
   const chrome = !isGamePlaying;
 
@@ -38,7 +41,9 @@ export default function TetrisPage() {
           <Text style={[s.headerTitle, { fontFamily: MONO }]}>{TAB_TITLES[tab]}</Text>
           <View style={s.coinCounter}>
             <ArcadeCoin size={22} />
-            <Text style={[s.coinCount, { fontFamily: MONO }]}>{coins}</Text>
+            <Text style={[s.coinCount, { fontFamily: MONO }, isSubscribed && { fontSize: 18, lineHeight: 20 }]}>
+              {isSubscribed ? '∞' : coins}
+            </Text>
           </View>
         </View>
       )}

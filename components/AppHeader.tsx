@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { APP_NAME, APP_ICON } from '../constants/social';
 import { useCoinStore } from '../store/coinStore';
+import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 
 export default function AppHeader() {
@@ -12,8 +13,10 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const coins = useCoinStore((s) => s.coins);
   const loadCoins = useCoinStore((s) => s.loadCoins);
+  const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
+  const loadSubscription = useSubscriptionStore((s) => s.loadSubscription);
 
-  useEffect(() => { loadCoins(); }, []);
+  useEffect(() => { loadCoins(); loadSubscription(); }, []);
 
   return (
     <LinearGradient
@@ -34,13 +37,21 @@ export default function AppHeader() {
           {APP_NAME}
         </Text>
 
-        <View style={[styles.coinPill, {
+        <View style={[styles.coinPill, isSubscribed ? {
+          backgroundColor: 'rgba(255,215,0,0.12)',
+          borderColor: '#FFD700',
+        } : {
           backgroundColor: theme.colors.backgroundSecondary,
           borderColor: theme.colors.border,
         }]}>
           <ArcadeCoin size={20} />
-          <Text style={[styles.coinCount, { color: theme.colors.text }]}>
-            {coins.toLocaleString()}
+          <Text style={[
+            styles.coinCount,
+            isSubscribed
+              ? { color: '#FFD700', fontSize: 18, fontWeight: '800', lineHeight: 20 }
+              : { color: theme.colors.text },
+          ]}>
+            {isSubscribed ? '∞' : coins.toLocaleString()}
           </Text>
         </View>
       </View>
