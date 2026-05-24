@@ -637,6 +637,13 @@ export default function AsteroidsGame() {
       return;
     }
     if (!isSubscribed) spendCoin();
+    // Freeze the demo so it doesn't keep playing behind the coin/countdown UI
+    if (gsRef.current && gsRef.current.phase === 'demo') {
+      gsRef.current.phase = 'idle';
+      gsRef.current.asteroids = [];
+      gsRef.current.bullets = [];
+      gsRef.current.particles = [];
+    }
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
