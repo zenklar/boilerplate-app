@@ -59,7 +59,7 @@ const ENEMY_SCORE = 250;
 const ENEMY_BULLET_SPEED = 4.6;
 const ENEMY_BULLET_LIFETIME = 110;
 /** First level at which a saucer can appear. Below this it's pure asteroids. */
-const ENEMY_FIRST_LEVEL = 4;
+const ENEMY_FIRST_LEVEL = 2;
 /** How many saucers spawn for a given level. */
 const enemyCountForLevel = (lvl: number): number => {
   if (lvl < ENEMY_FIRST_LEVEL) return 0;
@@ -90,10 +90,14 @@ interface Enemy {
   /** Which sprite from constants/enemyImages.ts to render. */
   designId: number;
   x: number; y: number; vx: number; vy: number;
+  /** Facing angle in degrees (0 = up, like the player ship). */
+  angle: number;
   hp: number;
   fireCD: number;
   /** Ticks until next random direction change. */
   driftCD: number;
+  /** Ticks remaining of the deflection shield flash (after an asteroid bounce). */
+  shieldFlash: number;
 }
 interface EnemyBullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Particle {
@@ -181,9 +185,12 @@ function mkEnemy(W: number, H: number, lvl: number, avoidX: number, avoidY: numb
   return {
     id: uid(), designId,
     x, y: Math.max(ENEMY_RADIUS, Math.min(H - ENEMY_RADIUS, safeY)),
-    vx, vy: 0, hp: ENEMY_MAX_HP,
+    vx, vy: 0,
+    angle: fromLeft ? 90 : 270, // start facing where they're moving
+    hp: ENEMY_MAX_HP,
     fireCD: 60 + Math.floor(rand(0, 40)),
     driftCD: 40 + Math.floor(rand(0, 40)),
+    shieldFlash: 0,
   };
 }
 
@@ -524,8 +531,10 @@ export default function AsteroidsGame() {
       g.asteroids = [...g.asteroids.filter((a) => !deadA.has(a.id)), ...born];
       g.bullets = g.bullets.filter((_, i) => !deadB.has(i));
 
-      /* Enemy saucers — drift, shoot at player */
+      /* Enemy saucers — drift around, turn to face player, fire forward */
+      const ENEMY_ROT_SPD = 2.5; // degrees per tick — slower than the player
       for (const e of g.enemies) {
+        // Drift movement
         e.driftCD--;
         if (e.driftCD <= 0) {
           const baseSpd = 1.2 + Math.min(1.4, (g.level - ENEMY_FIRST_LEVEL) * 0.12);
@@ -538,21 +547,69 @@ export default function AsteroidsGame() {
         e.y += e.vy;
         if (e.y < ENEMY_RADIUS) { e.y = ENEMY_RADIUS; e.vy = Math.abs(e.vy); }
         if (e.y > H - ENEMY_RADIUS) { e.y = H - ENEMY_RADIUS; e.vy = -Math.abs(e.vy); }
+
+        // Rotate to face the player (sprite-style angle: 0 = up)
+        const targetAngle = Math.atan2(g.sy - e.y, g.sx - e.x) * (180 / Math.PI) + 90;
+        let diff = ((targetAngle - e.angle + 540) % 360) - 180;
+        const turn = Math.min(ENEMY_ROT_SPD, Math.abs(diff));
+        e.angle += Math.sign(diff) * turn;
+
+        if (e.shieldFlash > 0) e.shieldFlash--;
+
+        // Fire forward only when roughly aligned (skip during demo just in case)
         e.fireCD--;
-        if (e.fireCD <= 0 && !isDemo) {
-          const baseAngle = Math.atan2(g.sy - e.y, g.sx - e.x);
+        if (e.fireCD <= 0 && !isDemo && Math.abs(diff) < 12) {
           const spread = enemyAimSpreadForLevel(g.level);
-          const angle = baseAngle + rand(-spread, spread);
+          const r = toR(e.angle - 90) + rand(-spread, spread);
           g.enemyBullets.push({
-            x: e.x + Math.cos(angle) * (ENEMY_RADIUS + 4),
-            y: e.y + Math.sin(angle) * (ENEMY_RADIUS + 4),
-            vx: Math.cos(angle) * ENEMY_BULLET_SPEED,
-            vy: Math.sin(angle) * ENEMY_BULLET_SPEED,
+            x: e.x + Math.cos(r) * (ENEMY_RADIUS + 4),
+            y: e.y + Math.sin(r) * (ENEMY_RADIUS + 4),
+            vx: Math.cos(r) * ENEMY_BULLET_SPEED,
+            vy: Math.sin(r) * ENEMY_BULLET_SPEED,
             life: ENEMY_BULLET_LIFETIME,
           });
           e.fireCD = enemyFireCDForLevel(g.level) + Math.floor(rand(0, 40));
           if (Platform.OS === 'web') playEnemyShoot();
         }
+      }
+
+      /* Enemy ↔ asteroid collisions — saucers are immune; the asteroid
+       * shatters (or vanishes if it's already small) and the enemy briefly
+       * shows a deflection shield. */
+      const astroDeadFromEnemy = new Set<number>();
+      const astroBorn: Asteroid[] = [];
+      for (const e of g.enemies) {
+        for (const a of g.asteroids) {
+          if (astroDeadFromEnemy.has(a.id)) continue;
+          if (d2(e.x, e.y, a.x, a.y) < (ENEMY_RADIUS + a.radius * 0.85) ** 2) {
+            astroDeadFromEnemy.add(a.id);
+            e.shieldFlash = 12;
+            // Spawn replacements like a player kill — minus the score / sfx.
+            if (a.size === 'large') {
+              astroBorn.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
+              astroBorn.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
+            } else if (a.size === 'medium') {
+              astroBorn.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
+              astroBorn.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
+            }
+            // Small dust puff so the deflection is visible
+            for (let k = 0; k < 10; k++) {
+              const dDir = rand(0, Math.PI * 2);
+              const dSpd = rand(0.6, 2.2);
+              g.particles.push({
+                id: uid(), x: a.x, y: a.y,
+                vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
+                life: 18, maxLife: 18, size: rand(2, 4), kind: 'debris',
+              });
+            }
+          }
+        }
+      }
+      if (astroDeadFromEnemy.size > 0) {
+        g.asteroids = [
+          ...g.asteroids.filter((a) => !astroDeadFromEnemy.has(a.id)),
+          ...astroBorn,
+        ];
       }
 
       /* Enemy bullets — advance and cull */
@@ -957,11 +1014,12 @@ export default function AsteroidsGame() {
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
-        {/* Enemy saucers — sprite + 3-segment HP bar */}
+        {/* Enemy saucers — sprite (rotated to face player) + HP bar + shield flash */}
         {g?.phase === 'playing' && g.enemies.map((e) => {
           const barW = ENEMY_SPRITE * 0.8;
           const segW = (barW - (ENEMY_MAX_HP - 1) * 2) / ENEMY_MAX_HP;
           const src = ENEMY_IMAGES[e.designId];
+          const shieldR = ENEMY_RADIUS + 6;
           return (
             <View
               key={e.id}
@@ -974,14 +1032,31 @@ export default function AsteroidsGame() {
               }}
               pointerEvents="none"
             >
-              {src && (
-                <Image
-                  source={src}
-                  style={{ width: ENEMY_SPRITE, height: ENEMY_SPRITE }}
-                  resizeMode="contain"
-                />
+              {/* Deflection shield ring — pops briefly when an asteroid bounces */}
+              {e.shieldFlash > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  left: ENEMY_SPRITE / 2 - shieldR,
+                  top: ENEMY_SPRITE / 2 - shieldR,
+                  width: shieldR * 2, height: shieldR * 2, borderRadius: shieldR,
+                  borderWidth: 2, borderColor: '#7FE3FF',
+                  backgroundColor: 'rgba(127,227,255,0.18)',
+                  opacity: e.shieldFlash / 12,
+                }} />
               )}
-              {/* Health bar */}
+              {src && (
+                <View style={{
+                  width: ENEMY_SPRITE, height: ENEMY_SPRITE,
+                  transform: [{ rotate: `${e.angle}deg` }],
+                }}>
+                  <Image
+                    source={src}
+                    style={{ width: ENEMY_SPRITE, height: ENEMY_SPRITE }}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+              {/* Health bar (stays upright, not rotated) */}
               <View style={{
                 position: 'absolute',
                 left: (ENEMY_SPRITE - barW) / 2, top: -10,
