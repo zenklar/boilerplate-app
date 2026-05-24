@@ -13,34 +13,21 @@ import {
 } from '../constants/tetris';
 import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed } from '../utils/sounds';
 
-/** Classic arcade-style block: base color with light highlight bands on the
- *  top/left, dark shadow bands on the bottom/right, and a hard black border.
- *  Pure View-based — cheaper than LinearGradient when rendering 50+ cells. */
+/** Classic arcade-style block in a single View: solid color with asymmetric
+ *  borders for the highlight/shadow bevel. One View per cell beats stacking
+ *  five overlay Views — matters when the board fills up. */
 function PixelBlock({ size, color }: { size: number; color: string }) {
-  const band = Math.max(2, Math.floor(size * 0.18));
+  const b = Math.max(2, Math.floor(size * 0.18));
   return (
-    <View style={{ width: size, height: size, backgroundColor: color }}>
-      <View style={{
-        position: 'absolute', left: 0, top: 0, right: 0, height: band,
-        backgroundColor: 'rgba(255,255,255,0.42)',
-      }} />
-      <View style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: band,
-        backgroundColor: 'rgba(255,255,255,0.22)',
-      }} />
-      <View style={{
-        position: 'absolute', left: 0, bottom: 0, right: 0, height: band,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-      }} />
-      <View style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0, width: band,
-        backgroundColor: 'rgba(0,0,0,0.22)',
-      }} />
-      <View style={{
-        position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
-        borderWidth: 1, borderColor: 'rgba(0,0,0,0.7)',
-      }} />
-    </View>
+    <View style={{
+      width: size, height: size,
+      backgroundColor: color,
+      borderStyle: 'solid',
+      borderTopWidth: b, borderTopColor: 'rgba(255,255,255,0.45)',
+      borderLeftWidth: b, borderLeftColor: 'rgba(255,255,255,0.28)',
+      borderBottomWidth: b, borderBottomColor: 'rgba(0,0,0,0.45)',
+      borderRightWidth: b, borderRightColor: 'rgba(0,0,0,0.28)',
+    }} />
   );
 }
 
@@ -72,18 +59,9 @@ const LOCK_DELAY_FRAMES = 30;
 const NEXT_QUEUE_LEN = 3;
 const CTRL_H = Platform.OS === 'web' ? 0 : 150;
 
-const PARTICLE_LIFE = 32;
-
 type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
 type Cell = TetrominoType | null;
 type Active = { type: TetrominoType; rot: number; x: number; y: number };
-type Particle = {
-  id: number;
-  x: number; y: number;
-  vx: number; vy: number;
-  life: number;
-  size: number;
-};
 
 type GS = {
   board: Cell[][];
@@ -97,12 +75,18 @@ type GS = {
   lockTimer: number;
   startTime: number;
   topOut: boolean;
-  particles: Particle[];
+  // Line-clear flash: the rows about to vanish stay highlighted for a short
+  // window before the board collapses. Cheaper than a particle system and
+  // gives a strong arcade "pop".
+  flashRows: number[];
+  flashTimer: number;
   // Demo-only: AI target for the active piece, plus a tick countdown that
   // throttles how often the AI moves/rotates so the preview is watchable.
   demoTarget: { x: number; rot: number } | null;
   demoStepCD: number;
 };
+
+const FLASH_FRAMES = 12;
 
 // How many ticks (16ms each) between AI actions in the title-screen demo.
 // Higher = slower preview. Bumped to ~7 frames/step + a longer pause after
@@ -183,32 +167,6 @@ function fillQueueFromBag(queue: TetrominoType[], bag: TetrominoType[]): {
     q.push(b.shift()!);
   }
   return { queue: q, bag: b };
-}
-
-/** Spawn debris particles for every block in the given board rows. */
-function spawnLineParticles(rows: number[], board: Cell[][]): Particle[] {
-  const out: Particle[] = [];
-  for (const y of rows) {
-    for (let x = 0; x < BOARD_W; x++) {
-      if (!board[y][x]) continue;
-      // Each block bursts into a few pixel-sized particles
-      const n = 5;
-      for (let i = 0; i < n; i++) {
-        const dir = rand(0, Math.PI * 2);
-        const spd = rand(0.15, 0.55);
-        out.push({
-          id: uid(),
-          x: x + 0.5 + rand(-0.25, 0.25),
-          y: y + 0.5 + rand(-0.25, 0.25),
-          vx: Math.cos(dir) * spd,
-          vy: Math.sin(dir) * spd - 0.1,
-          life: PARTICLE_LIFE,
-          size: rand(0.18, 0.32),
-        });
-      }
-    }
-  }
-  return out;
 }
 
 /** Pick a random valid (x, rot) landing target for the demo AI. */
@@ -348,17 +306,17 @@ export default function TetrisGame() {
 
       const isDemo = phase === 'demo';
 
-      // Advance particles (positions in board-cell units)
-      if (g.particles.length > 0) {
-        g.particles = g.particles
-          .map((p) => ({
-            ...p,
-            x: p.x + p.vx,
-            y: p.y + p.vy,
-            vy: p.vy + 0.02, // mild gravity
-            life: p.life - 1,
-          }))
-          .filter((p) => p.life > 0);
+      // Line-clear flash: hold the cleared rows visible briefly, then collapse.
+      if (g.flashTimer > 0) {
+        g.flashTimer--;
+        if (g.flashTimer === 0) {
+          const { board: cleaned } = clearFull(g.board);
+          g.board = cleaned;
+          g.flashRows = [];
+          spawnNext(isDemo);
+        }
+        setTick((t) => t + 1);
+        return;
       }
 
       if (!g.active) { setTick((t) => t + 1); return; }
@@ -453,7 +411,8 @@ export default function TetrisGame() {
       if (isDemo) {
         // Reset the board so the preview never freezes
         g.board = emptyBoard();
-        g.particles = [];
+        g.flashRows = [];
+        g.flashTimer = 0;
         // Try again from a clean slate
         if (collides(g.board, g.active)) {
           // Shouldn't happen, but bail safely
@@ -468,17 +427,14 @@ export default function TetrisGame() {
   function lockPiece(isDemo: boolean) {
     const g = gsRef.current!;
     if (!g.active) return;
-    const placed = place(g.board, g.active);
-    // Find which rows are full BEFORE collapsing so we can emit particles.
+    g.board = place(g.board, g.active);
+    g.active = null;
     const fullRows: number[] = [];
     for (let y = 0; y < BOARD_H; y++) {
-      if (placed[y].every((c) => c !== null)) fullRows.push(y);
+      if (g.board[y].every((c) => c !== null)) fullRows.push(y);
     }
-    const { board: cleaned, cleared } = clearFull(placed);
-    g.board = cleaned;
-    if (cleared > 0) {
-      const burst = spawnLineParticles(fullRows, placed);
-      g.particles = [...g.particles, ...burst];
+    if (fullRows.length > 0) {
+      const cleared = fullRows.length;
       if (!isDemo) {
         g.score += LINE_SCORE[cleared] * g.level;
         g.lines += cleared;
@@ -488,9 +444,14 @@ export default function TetrisGame() {
       if (Platform.OS === 'web' && !isDemo) {
         playExplosion(cleared >= 4 ? 'large' : cleared >= 2 ? 'medium' : 'small');
       }
-    } else if (Platform.OS === 'web' && !isDemo) {
-      playShoot();
+      // Hold the cleared rows visible (flashing) for FLASH_FRAMES ticks.
+      // The game loop will collapse and spawn the next piece when the
+      // timer reaches zero.
+      g.flashRows = fullRows;
+      g.flashTimer = FLASH_FRAMES;
+      return;
     }
+    if (Platform.OS === 'web' && !isDemo) playShoot();
     spawnNext(isDemo);
   }
 
@@ -577,7 +538,8 @@ export default function TetrisGame() {
       dropAccum: 0, lockTimer: 0,
       startTime: Date.now(),
       topOut: false,
-      particles: [],
+      flashRows: [],
+      flashTimer: 0,
       demoTarget: null,
       demoStepCD: 0,
     };
@@ -602,7 +564,8 @@ export default function TetrisGame() {
       dropAccum: 0, lockTimer: 0,
       startTime: Date.now(),
       topOut: false,
-      particles: [],
+      flashRows: [],
+      flashTimer: 0,
       demoTarget: null,
       demoStepCD: 0,
     };
@@ -753,21 +716,20 @@ export default function TetrisGame() {
             </View>
           ) : null))}
 
-          {/* Particles (board-cell coordinates) */}
-          {showBoard && g!.particles.map((p) => {
-            const opacity = Math.min(1, p.life / PARTICLE_LIFE);
-            const px = CELL * p.size;
+          {/* Line-clear flash — pulses cleared rows white before collapse */}
+          {showBoard && g!.flashTimer > 0 && g!.flashRows.map((y) => {
+            // 3-phase pulse over FLASH_FRAMES: bright → dim → bright fade
+            const t = g!.flashTimer / FLASH_FRAMES;
+            const opacity = Math.abs(Math.sin(t * Math.PI * 2));
             return (
               <View
-                key={p.id}
+                key={`flash-${y}`}
                 style={{
                   position: 'absolute',
-                  left: p.x * CELL - px / 2,
-                  top: p.y * CELL - px / 2,
-                  width: px,
-                  height: px,
+                  left: 0, top: y * CELL,
+                  width: boardPxW, height: CELL,
                   backgroundColor: '#FFFFFF',
-                  opacity,
+                  opacity: 0.55 + 0.45 * opacity,
                 }}
               />
             );
