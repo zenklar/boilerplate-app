@@ -973,11 +973,15 @@ export default function AsteroidsGame() {
   const g = gsRef.current;
   const isPlaying = g?.phase === 'playing';
   const shipVisible = !g || g.sInv === 0 || frame.current % 6 < 3;
+  // Title-screen "boxed preview" treatment — same idea as the Tetris demo:
+  // the simulation runs inside a bordered area in the middle of the screen
+  // so the TITLE sits cleanly above and INSERT COIN sits cleanly below.
+  const isDemoLayout = (!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null;
 
   return (
-    <View ref={rootRef} style={s.root} onLayout={onLayout}>
-      {/* ── Game canvas (fills all space) ── */}
-      <View style={s.canvas}>
+    <View ref={rootRef} style={s.root}>
+      {/* ── Game canvas — full-screen during play, boxed during demo ── */}
+      <View style={[s.canvas, isDemoLayout && s.canvasDemo]} onLayout={onLayout}>
 
         {/* Asteroids — SVG polygons on web, rounded fallback on native */}
         {g?.asteroids.map((a) => {
@@ -1181,32 +1185,6 @@ export default function AsteroidsGame() {
           </Text>
         )}
 
-        {/* ── Idle / title screen (demo plays behind it) ── */}
-        {(!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null && (
-          <View style={s.overlay} pointerEvents="box-none">
-            <View style={s.overlayTop} pointerEvents="box-none">
-              <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
-              {highScore > 0 && (
-                <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                  HIGH SCORE   {highScore}
-                </Text>
-              )}
-            </View>
-            <View style={s.overlayBottom} pointerEvents="box-none">
-              <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
-                <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
-                  {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
-                </Text>
-              </Pressable>
-              {Platform.OS === 'web' && (
-                <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                  Mouse aim · LMB thrust · Space to fire
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-
         {/* ── Coin insert animation overlay ── */}
         {insertPhase === 'coinanim' && (
           <View style={s.insertOverlay}>
@@ -1309,6 +1287,33 @@ export default function AsteroidsGame() {
           </View>
         )}
       </View>
+
+      {/* ── Idle / title screen — sibling of the canvas so the title can sit
+            above the boxed preview and INSERT COIN can sit below it. ── */}
+      {isDemoLayout && (
+        <View style={s.overlay} pointerEvents="box-none">
+          <View style={s.overlayTop} pointerEvents="box-none">
+            <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
+            {highScore > 0 && (
+              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+                HIGH SCORE   {highScore}
+              </Text>
+            )}
+          </View>
+          <View style={s.overlayBottom} pointerEvents="box-none">
+            <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
+              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
+                {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
+              </Text>
+            </Pressable>
+            {Platform.OS === 'web' && (
+              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+                Mouse aim · LMB thrust · Space to fire
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1317,6 +1322,13 @@ export default function AsteroidsGame() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   canvas: { flex: 1, overflow: 'hidden' },
+  canvasDemo: {
+    marginTop: 160,
+    marginBottom: 150,
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
 
   bullet: {
     position: 'absolute',
