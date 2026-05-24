@@ -643,9 +643,16 @@ export default function TetrisGame() {
 
   // Board dimensions — fit inside available area, leaving room for HUD + controls
   const playableH = area.h - CTRL_H;
-  const sidePanelW = Math.min(120, area.w * 0.3);
-  const maxByW = (area.w - sidePanelW - 40) / BOARD_W;
-  const maxByH = (playableH - 40) / BOARD_H;
+  // On the title/demo screen we hide the side panel and reserve vertical
+  // space for the TETRIS title + INSERT COIN row so the falling pieces
+  // sit cleanly between them instead of being covered by the overlay.
+  const isDemoLayout = phase === 'idle' || phase === 'demo';
+  const demoReserveTop = 110;
+  const demoReserveBottom = 110;
+  const sidePanelW = isDemoLayout ? 0 : Math.min(120, area.w * 0.3);
+  const maxByW = (area.w - sidePanelW - (isDemoLayout ? 16 : 40)) / BOARD_W;
+  const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : 40;
+  const maxByH = (playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
   const boardPxW = CELL * BOARD_W;
   const boardPxH = CELL * BOARD_H;
@@ -679,7 +686,14 @@ export default function TetrisGame() {
   return (
     <View style={s.root} onLayout={onLayout}>
       {/* Game area */}
-      <View style={s.gameArea}>
+      <View style={[
+        s.gameArea,
+        isDemoLayout && {
+          paddingTop: demoReserveTop,
+          paddingBottom: demoReserveBottom,
+          justifyContent: 'center',
+        },
+      ]}>
         {/* Board — Pressable so a left click rotates CW */}
         <Pressable
           ref={boardRef as any}
@@ -736,7 +750,9 @@ export default function TetrisGame() {
           })}
         </Pressable>
 
-        {/* Side panel — score / level / lines / next 3 */}
+        {/* Side panel — score / level / lines / next 3. Hidden on the
+            title/demo screen so the preview reads as just the board. */}
+        {!isDemoLayout && (
         <View style={[s.side, { width: sidePanelW }]}>
           <Text style={[s.sideLabel, { fontFamily: MONO }]}>SCORE</Text>
           <Text style={[s.sideValue, { fontFamily: MONO }]}>
@@ -777,6 +793,7 @@ export default function TetrisGame() {
             })}
           </View>
         </View>
+        )}
       </View>
 
       {/* ── Title / idle overlay (sits over the autoplay demo) ── */}
