@@ -2,21 +2,41 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Platform, LayoutChangeEvent, Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTetrisStore } from '../store/tetrisStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 import {
-  TETROMINOS, TETROMINO_TYPES,
+  TETROMINOS, TETROMINO_COLORS, TETROMINO_TYPES,
   TetrominoType, BOARD_W, BOARD_H, LINE_SCORE, DROP_FRAMES_PER_LEVEL,
 } from '../constants/tetris';
 import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed } from '../utils/sounds';
 
+/** Classic arcade-style block: base color with a top-left light wash and a
+ *  bottom-right dark shadow on top of a hard black border. */
+function PixelBlock({ size, color }: { size: number; color: string }) {
+  return (
+    <View style={{ width: size, height: size, backgroundColor: color }}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)', 'rgba(0,0,0,0.4)']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill as any}
+      />
+      <View style={{
+        position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
+        borderWidth: 1, borderColor: 'rgba(0,0,0,0.65)',
+      }} />
+    </View>
+  );
+}
+
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
 const SOFT_DROP_DIVISOR = 6; // soft drop falls this many cells per gravity tick
-const FAST_DROP_FRAMES = 1;  // Space-held fast drop — one cell per frame
 const LOCK_DELAY_FRAMES = 30;
 const NEXT_QUEUE_LEN = 3;
 const CTRL_H = Platform.OS === 'web' ? 0 : 150;
@@ -191,8 +211,16 @@ export default function TetrisGame() {
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
 
   const gsRef = useRef<GS | null>(null);
-  // Input state — `fast` is the held-Space "speed it down" boost
-  const heldRef = useRef<{ down: boolean; fast: boolean }>({ down: false, fast: false });
+  const heldRef = useRef<{ down: boolean }>({ down: false });
+  // Web-only: tracks the column the mouse is currently over, or null when
+  // the mouse is outside the board. Used to steer the active piece.
+  const mouseTargetX = useRef<number | null>(null);
+  // Board origin in window coords + current cell size, used to map mouse
+  // events back to board columns from anywhere on the page.
+  const boardOrigin = useRef({ x: 0, y: 0 });
+  const cellRef = useRef(0);
+  const boardSizeRef = useRef({ w: 0, h: 0 });
+  const boardRef = useRef<View>(null);
 
   useEffect(() => {
     loadHighScore(); loadRuns();
@@ -228,19 +256,46 @@ export default function TetrisGame() {
           break;
         case 'Space':
           e.preventDefault();
-          heldRef.current.fast = true;
+          if (!e.repeat) hardDrop();
           break;
       }
     };
     const onUp = (e: KeyboardEvent) => {
       if (e.code === 'ArrowDown' || e.code === 'KeyS') heldRef.current.down = false;
-      if (e.code === 'Space') heldRef.current.fast = false;
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('keyup', onUp);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keyup', onUp);
+    };
+  }, [phase]);
+
+  /* ── Mouse position → board column (web) ── */
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onMove = (e: MouseEvent) => {
+      if (phase !== 'playing') return;
+      const cell = cellRef.current;
+      if (cell <= 0) return;
+      const ox = boardOrigin.current.x;
+      const oy = boardOrigin.current.y;
+      const { w: bw, h: bh } = boardSizeRef.current;
+      const lx = e.clientX - ox;
+      const ly = e.clientY - oy;
+      // Allow control when mouse is anywhere within (or just outside) the board
+      if (lx < -cell || lx > bw + cell || ly < -bh || ly > bh + cell) {
+        mouseTargetX.current = null;
+      } else {
+        mouseTargetX.current = Math.min(BOARD_W - 1, Math.max(0, Math.floor(lx / cell)));
+      }
+    };
+    const onLeave = () => { mouseTargetX.current = null; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseleave', onLeave);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
     };
   }, [phase]);
 
@@ -268,9 +323,8 @@ export default function TetrisGame() {
 
       if (!g.active) { setTick((t) => t + 1); return; }
 
-      // Demo AI: rotate toward target, slide toward target x, then fast-drop.
+      // Demo AI: rotate toward target, slide toward target x, then drop.
       if (isDemo) {
-        heldRef.current.fast = false;
         if (!g.demoTarget) g.demoTarget = pickDemoTarget(g);
         const t = g.demoTarget;
         if (g.active.rot !== t.rot) {
@@ -280,14 +334,29 @@ export default function TetrisGame() {
         } else if (g.active.x > t.x) {
           tryMove(-1, 0);
         } else {
-          heldRef.current.fast = true;
+          // Aligned — drop straight to landing position and lock.
+          const dropY = ghostY(g.board, g.active);
+          g.active = { ...g.active, y: dropY };
+          lockPiece(true);
+          setTick((t) => t + 1);
+          return;
         }
+      } else if (Platform.OS === 'web' && mouseTargetX.current !== null) {
+        // Player steering: step the piece toward the mouse column. We use
+        // the piece's CENTER column so the cursor stays roughly over it.
+        const a = g.active;
+        const m = shape(a);
+        const w = m[0].length;
+        const centerCol = a.x + Math.floor((w - 1) / 2);
+        const want = mouseTargetX.current;
+        if (centerCol < want) tryMove(1, 0);
+        else if (centerCol > want) tryMove(-1, 0);
       }
 
       const gravity = DROP_FRAMES_PER_LEVEL(g.level);
-      let effective = gravity;
-      if (heldRef.current.fast) effective = FAST_DROP_FRAMES;
-      else if (heldRef.current.down) effective = Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR));
+      const effective = heldRef.current.down
+        ? Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR))
+        : gravity;
 
       g.dropAccum++;
       if (g.dropAccum >= effective) {
@@ -295,7 +364,7 @@ export default function TetrisGame() {
         const moved = { ...g.active, y: g.active.y + 1 };
         if (collides(g.board, moved)) {
           g.lockTimer++;
-          if (g.lockTimer >= LOCK_DELAY_FRAMES || heldRef.current.fast) {
+          if (g.lockTimer >= LOCK_DELAY_FRAMES) {
             lockPiece(isDemo);
           }
         } else {
@@ -397,6 +466,16 @@ export default function TetrisGame() {
     }
   }
 
+  function hardDrop() {
+    const g = gsRef.current; if (!g || !g.active) return;
+    const startY = g.active.y;
+    const dropY = ghostY(g.board, g.active);
+    g.score += (dropY - startY) * 2;
+    g.active = { ...g.active, y: dropY };
+    lockPiece(false);
+    setTick((t) => t + 1);
+  }
+
   function gameOver() {
     const g = gsRef.current; if (!g) return;
     g.topOut = true;
@@ -436,7 +515,7 @@ export default function TetrisGame() {
       demoTarget: null,
     };
     // Reset input state so any keys still held don't leak in
-    heldRef.current = { down: false, fast: false };
+    heldRef.current = { down: false };
     setIsGamePlaying(true);
     setPhase('playing');
   }
@@ -514,7 +593,7 @@ export default function TetrisGame() {
     if (!isSubscribed) spendCoin();
     // Stop the demo so it doesn't keep churning behind the coin/countdown UI.
     gsRef.current = null;
-    heldRef.current = { down: false, fast: false };
+    heldRef.current = { down: false };
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
@@ -572,49 +651,54 @@ export default function TetrisGame() {
       <View style={s.gameArea}>
         {/* Board — Pressable so a left click rotates CW */}
         <Pressable
+          ref={boardRef as any}
           onPress={() => { if (phase === 'playing') tryRotate(1); }}
+          onLayout={() => {
+            cellRef.current = CELL;
+            boardSizeRef.current = { w: boardPxW, h: boardPxH };
+            if (Platform.OS === 'web' && boardRef.current) {
+              (boardRef.current as any).measureInWindow?.((x: number, y: number) => {
+                boardOrigin.current = { x, y };
+              });
+            }
+          }}
           style={[s.board, { width: boardPxW, height: boardPxH }]}
         >
-          {/* Cells */}
+          {/* Empty-cell grid (background) */}
           {Array.from({ length: BOARD_H * BOARD_W }).map((_, i) => {
             const y = Math.floor(i / BOARD_W);
             const x = i % BOARD_W;
-            const cell = displayCells ? displayCells[y][x] : null;
-            const isGhost = ghostCells ? ghostCells[y][x] && !cell : false;
             return (
               <View
-                key={i}
+                key={`bg-${i}`}
                 style={{
                   position: 'absolute',
-                  left: x * CELL,
-                  top: y * CELL,
-                  width: CELL,
-                  height: CELL,
-                  borderWidth: 1,
-                  borderColor: '#0E0E0E',
-                  backgroundColor: cell ? '#FFFFFF' : '#070707',
+                  left: x * CELL, top: y * CELL,
+                  width: CELL, height: CELL,
+                  borderWidth: 1, borderColor: '#101010',
+                  backgroundColor: '#060606',
                 }}
-              >
-                {cell && (
-                  // Inner darker square for the classic pixel-block look
-                  <View style={{
-                    position: 'absolute',
-                    left: Math.max(2, CELL * 0.18),
-                    top: Math.max(2, CELL * 0.18),
-                    right: Math.max(2, CELL * 0.18),
-                    bottom: Math.max(2, CELL * 0.18),
-                    backgroundColor: '#9A9A9A',
-                  }} />
-                )}
-                {isGhost && (
-                  <View style={{
-                    position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
-                    borderWidth: 1, borderColor: '#3A3A3A',
-                  }} />
-                )}
-              </View>
+              />
             );
           })}
+          {/* Ghost piece outline */}
+          {ghostCells && ghostCells.map((row, y) => row.map((on, x) => on && !(displayCells && displayCells[y][x]) ? (
+            <View key={`gh-${y}-${x}`} style={{
+              position: 'absolute',
+              left: x * CELL, top: y * CELL,
+              width: CELL, height: CELL,
+              borderWidth: 1, borderColor: '#3A3A3A',
+            }} />
+          ) : null))}
+          {/* Filled cells (gradient blocks) */}
+          {displayCells && displayCells.map((row, y) => row.map((cell, x) => cell ? (
+            <View key={`f-${y}-${x}`} style={{
+              position: 'absolute',
+              left: x * CELL, top: y * CELL,
+            }}>
+              <PixelBlock size={CELL} color={TETROMINO_COLORS[cell]} />
+            </View>
+          ) : null))}
 
           {/* Particles (board-cell coordinates) */}
           {showBoard && g!.particles.map((p) => {
@@ -656,6 +740,7 @@ export default function TetrisGame() {
             {g && phase === 'playing' && g.nextQueue.slice(0, NEXT_QUEUE_LEN).map((type, idx) => {
               const m = TETROMINOS[type][0];
               const cellSize = CELL * (idx === 0 ? 0.7 : 0.5);
+              const color = TETROMINO_COLORS[type];
               return (
                 <View
                   key={idx}
@@ -667,19 +752,8 @@ export default function TetrisGame() {
                         position: 'absolute',
                         left: 4 + rx * cellSize,
                         top: 4 + ry * cellSize,
-                        width: cellSize,
-                        height: cellSize,
-                        backgroundColor: '#FFFFFF',
-                        borderWidth: 1, borderColor: '#222',
                       }}>
-                        <View style={{
-                          position: 'absolute',
-                          left: Math.max(2, cellSize * 0.18),
-                          top: Math.max(2, cellSize * 0.18),
-                          right: Math.max(2, cellSize * 0.18),
-                          bottom: Math.max(2, cellSize * 0.18),
-                          backgroundColor: '#9A9A9A',
-                        }} />
+                        <PixelBlock size={cellSize} color={color} />
                       </View>
                     ) : null)
                   )}
@@ -690,8 +764,8 @@ export default function TetrisGame() {
         </View>
       </View>
 
-      {/* ── Title / idle overlay ── */}
-      {phase === 'idle' && (
+      {/* ── Title / idle overlay (sits over the autoplay demo) ── */}
+      {(phase === 'idle' || phase === 'demo') && (
         <View style={s.overlay} pointerEvents="box-none">
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>TETRIS</Text>
@@ -709,7 +783,7 @@ export default function TetrisGame() {
             </Pressable>
             {Platform.OS === 'web' && (
               <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                ← →  move · click/↑  rotate · ↓  soft · Space  speed drop
+                Mouse  move · Click  rotate · ↓  soft drop · Space  hard drop
               </Text>
             )}
           </View>
@@ -782,14 +856,17 @@ export default function TetrisGame() {
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⟳</Text>
           </Pressable>
           <Pressable
-            style={[s.ctrlBtn, s.dropBtn]}
-            onPressIn={() => { heldRef.current.fast = true; }}
-            onPressOut={() => { heldRef.current.fast = false; }}
+            style={s.ctrlBtn}
+            onPressIn={() => { heldRef.current.down = true; }}
+            onPressOut={() => { heldRef.current.down = false; }}
           >
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
           </Pressable>
           <Pressable style={s.ctrlBtn} onPressIn={() => tryMove(1, 0)}>
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
+          </Pressable>
+          <Pressable style={[s.ctrlBtn, s.dropBtn]} onPressIn={hardDrop}>
+            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⤓</Text>
           </Pressable>
         </View>
       )}
@@ -823,7 +900,6 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between', alignItems: 'center',
     paddingTop: 40, paddingBottom: 50,
-    backgroundColor: 'rgba(0,0,0,0.75)',
   },
   overlayTop: { alignItems: 'center', gap: 10 },
   overlayBottom: { alignItems: 'center', gap: 10 },
