@@ -15,86 +15,246 @@ const PERKS = [
   'VIP badge in leaderboards',
 ];
 
+/* Floating sparkle particle for active state */
+function Sparkle({ delay, left, top, size }: { delay: number; left: number; top: number; size: number }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(v, { toValue: 1, duration: 1800, useNativeDriver: true }),
+        Animated.timing(v, { toValue: 0, duration: 1800, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  const opacity = v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 0] });
+  const scale = v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.4, 1, 0.4] });
+  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [0, -14] });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left, top,
+        opacity,
+        transform: [{ scale }, { translateY }],
+      }}
+    >
+      <Ionicons name="sparkles" size={size} color="#F0A8FF" />
+    </Animated.View>
+  );
+}
+
 function SubscriptionTile() {
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const subscribe = useSubscriptionStore((s) => s.subscribe);
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);
 
   const shimmer = useRef(new Animated.Value(0)).current;
+  const shimmer2 = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const hue = useRef(new Animated.Value(0)).current;
+  const dotPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!isSubscribed) { shimmer.setValue(0); glow.setValue(0); return; }
+    if (!isSubscribed) {
+      shimmer.setValue(0); shimmer2.setValue(0); glow.setValue(0);
+      pulse.setValue(0); hue.setValue(0); dotPulse.setValue(0);
+      return;
+    }
     const shimAnim = Animated.loop(Animated.timing(shimmer, { toValue: 1, duration: 2600, useNativeDriver: true }));
+    const shim2Anim = Animated.loop(
+      Animated.sequence([
+        Animated.delay(900),
+        Animated.timing(shimmer2, { toValue: 1, duration: 2200, useNativeDriver: true }),
+        Animated.timing(shimmer2, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    );
     const glowAnim = Animated.loop(Animated.sequence([
       Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: true }),
       Animated.timing(glow, { toValue: 0, duration: 1400, useNativeDriver: true }),
     ]));
-    shimAnim.start(); glowAnim.start();
-    return () => { shimAnim.stop(); glowAnim.stop(); };
+    const pulseAnim = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 1800, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 1800, useNativeDriver: true }),
+    ]));
+    const hueAnim = Animated.loop(Animated.timing(hue, { toValue: 1, duration: 4200, useNativeDriver: false }));
+    const dotAnim = Animated.loop(Animated.sequence([
+      Animated.timing(dotPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(dotPulse, { toValue: 0, duration: 700, useNativeDriver: true }),
+    ]));
+    shimAnim.start(); shim2Anim.start(); glowAnim.start();
+    pulseAnim.start(); hueAnim.start(); dotAnim.start();
+    return () => {
+      shimAnim.stop(); shim2Anim.stop(); glowAnim.stop();
+      pulseAnim.stop(); hueAnim.stop(); dotAnim.stop();
+    };
   }, [isSubscribed]);
 
   const shimTranslate = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-320, 420] });
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.9] });
+  const shim2Translate = shimmer2.interpolate({ inputRange: [0, 1], outputRange: [-200, 420] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] });
+  const badgeScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const dotScale = dotPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
+  const dotOpacity = dotPulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0.2] });
+  const borderColor = hue.interpolate({
+    inputRange: [0, 0.33, 0.66, 1],
+    outputRange: ['#D946EF', '#A855F7', '#EC4899', '#D946EF'],
+  });
 
   return (
-    <View style={st.subCard}>
-      <LinearGradient
-        colors={isSubscribed ? ['#0E0530', '#2D0B6E', '#1A0850', '#3B1268', '#0A0828'] : ['#080420', '#160840', '#0C0635', '#1A0A48', '#080420']}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={st.subCardOuter}>
+      {/* Outer animated glow halo */}
       {isSubscribed && (
-        <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }] }, { pointerEvents: 'none' }]} />
-      )}
-      <LinearGradient
-        colors={['transparent', 'rgba(192,80,255,0.12)', 'transparent']}
-        start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {isSubscribed && (
-        <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { opacity: glowOpacity }, { pointerEvents: 'none' }]} />
+        <Animated.View pointerEvents="none" style={[st.haloWrap, { opacity: glowOpacity }]}>
+          <LinearGradient
+            colors={['rgba(217,70,239,0.0)', 'rgba(217,70,239,0.55)', 'rgba(168,85,247,0.55)', 'rgba(217,70,239,0.0)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
       )}
 
-      <View style={st.subTopRow}>
-        <View style={st.vipBadge}>
-          <Ionicons name="star" size={11} color="#FFD700" />
-          <Text style={st.vipBadgeTxt}>VIP</Text>
-        </View>
+      <View style={[st.subCard, isSubscribed && st.subCardActive]}>
+        <LinearGradient
+          colors={isSubscribed
+            ? ['#1A0540', '#3B0F7A', '#5B179C', '#3B0F7A', '#1A0540']
+            : ['#080420', '#160840', '#0C0635', '#1A0A48', '#080420']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Diagonal grid scanlines for arcade feel */}
         {isSubscribed && (
-          <View style={st.activePill}>
-            <View style={st.activeDot} />
-            <Text style={st.activeLabel}>ACTIVE</Text>
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <View key={i} style={[st.scanLine, { top: i * 22 }]} />
+            ))}
           </View>
         )}
-      </View>
 
-      <Text style={st.subTitle}>Arcade Pass</Text>
-      <Text style={st.subSubtitle}>Unlimited plays across all games</Text>
+        {/* Radial-ish purple highlight via stacked gradients */}
+        <LinearGradient
+          colors={isSubscribed
+            ? ['rgba(236,72,153,0.18)', 'transparent', 'rgba(168,85,247,0.20)']
+            : ['transparent', 'rgba(192,80,255,0.10)', 'transparent']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
-      <View style={st.perksWrap}>
-        {PERKS.map((p) => (
-          <View key={p} style={st.perkRow}>
-            <Ionicons name="checkmark-circle" size={14} color="#E040FB" />
-            <Text style={st.perkText}>{p}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={st.subFooter}>
-        {!isSubscribed && (
-          <Text style={st.subPrice}>
-            <Text style={st.subPriceAmt}>$14.99/mo</Text>
-          </Text>
+        {/* Primary shimmer beam */}
+        {isSubscribed && (
+          <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }, { skewX: '-20deg' }] }]} pointerEvents="none">
+            <LinearGradient
+              colors={['transparent', 'rgba(255,180,255,0.35)', 'rgba(255,255,255,0.55)', 'rgba(255,180,255,0.35)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
         )}
-        <TouchableOpacity
-          onPress={isSubscribed ? unsubscribe : subscribe}
-          style={[st.subBtn, isSubscribed ? st.subBtnCancel : st.subBtnActivate]}
-          activeOpacity={0.8}
-        >
-          <Text style={st.subBtnTxt}>{isSubscribed ? 'Cancel Subscription' : 'Activate'}</Text>
-        </TouchableOpacity>
+
+        {/* Secondary thinner shimmer beam */}
+        {isSubscribed && (
+          <Animated.View style={[st.shimmer2, { transform: [{ translateX: shim2Translate }, { skewX: '-20deg' }] }]} pointerEvents="none">
+            <LinearGradient
+              colors={['transparent', 'rgba(236,72,153,0.45)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        )}
+
+        {/* Floating sparkles */}
+        {isSubscribed && (
+          <>
+            <Sparkle delay={0}    left={28}  top={18}  size={11} />
+            <Sparkle delay={600}  left={210} top={36}  size={9}  />
+            <Sparkle delay={1200} left={150} top={84}  size={13} />
+            <Sparkle delay={400}  left={300} top={110} size={10} />
+            <Sparkle delay={1500} left={60}  top={150} size={8}  />
+            <Sparkle delay={900}  left={260} top={170} size={11} />
+          </>
+        )}
+
+        {/* Animated color-shifting border */}
+        {isSubscribed && (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: glowOpacity }]}>
+            <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { borderColor }]} />
+          </Animated.View>
+        )}
+
+        <View style={st.subTopRow}>
+          <Animated.View style={[st.vipBadge, isSubscribed && { transform: [{ scale: badgeScale }] }]}>
+            <Ionicons name="star" size={11} color="#FFD700" />
+            <Text style={st.vipBadgeTxt}>VIP</Text>
+          </Animated.View>
+          {isSubscribed && (
+            <View style={st.activePill}>
+              <View style={st.activeDotWrap}>
+                <Animated.View
+                  style={[st.activeDotRing, { transform: [{ scale: dotScale }], opacity: dotOpacity }]}
+                />
+                <View style={st.activeDot} />
+              </View>
+              <Text style={st.activeLabel}>ACTIVE</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={st.titleRow}>
+          <Text style={[st.subTitle, isSubscribed && st.subTitleActive]}>Arcade Pass</Text>
+          {isSubscribed && (
+            <Ionicons name="flash" size={20} color="#F0A8FF" style={{ marginLeft: 6 }} />
+          )}
+        </View>
+        <Text style={[st.subSubtitle, isSubscribed && { color: '#E9D5FF' }]}>
+          {isSubscribed ? '✨ Unlimited plays unlocked' : 'Unlimited plays across all games'}
+        </Text>
+
+        <View style={st.perksWrap}>
+          {PERKS.map((p) => (
+            <View key={p} style={st.perkRow}>
+              <Ionicons
+                name="checkmark-circle"
+                size={14}
+                color={isSubscribed ? '#F0A8FF' : '#E040FB'}
+              />
+              <Text style={[st.perkText, isSubscribed && { color: '#F3E8FF' }]}>{p}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={st.subFooter}>
+          {!isSubscribed && (
+            <Text style={st.subPrice}>
+              <Text style={st.subPriceAmt}>$14.99/mo</Text>
+            </Text>
+          )}
+          <TouchableOpacity
+            onPress={isSubscribed ? unsubscribe : subscribe}
+            activeOpacity={0.85}
+            style={st.subBtnWrap}
+          >
+            {isSubscribed ? (
+              <View style={[st.subBtn, st.subBtnCancel]}>
+                <Text style={st.subBtnTxt}>Cancel Subscription</Text>
+              </View>
+            ) : (
+              <LinearGradient
+                colors={['#C026D3', '#8B21E8', '#6D28D9']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={st.subBtn}
+              >
+                <Ionicons name="flash" size={15} color="#FFF" style={{ marginRight: 6 }} />
+                <Text style={st.subBtnTxt}>Activate</Text>
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -206,30 +366,73 @@ const st = StyleSheet.create({
   },
 
   /* Subscription card */
-  subCard: {
+  subCardOuter: {
     marginHorizontal: 16, marginBottom: 6,
+    position: 'relative',
+  },
+  haloWrap: {
+    position: 'absolute',
+    top: -6, left: -6, right: -6, bottom: -6,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  subCard: {
     borderRadius: 18, overflow: 'hidden',
     padding: 18,
     borderWidth: 1, borderColor: 'rgba(160, 80, 255, 0.4)',
   },
-  shimmer: {
-    position: 'absolute', top: 0, bottom: 0, width: 100,
-    backgroundColor: 'rgba(220,120,255,0.10)',
-    transform: [{ skewX: '-20deg' }],
+  subCardActive: {
+    borderColor: 'rgba(217, 70, 239, 0.7)',
+    shadowColor: '#D946EF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 14,
+    elevation: 10,
   },
-  glowBorder: { borderRadius: 18, borderWidth: 1.5, borderColor: '#D946EF' },
+  scanLine: {
+    position: 'absolute',
+    left: 0, right: 0,
+    height: 1,
+    backgroundColor: 'rgba(240, 168, 255, 0.06)',
+  },
+  shimmer: {
+    position: 'absolute', top: 0, bottom: 0, width: 120,
+  },
+  shimmer2: {
+    position: 'absolute', top: 0, bottom: 0, width: 60,
+  },
+  glowBorder: { borderRadius: 18, borderWidth: 2 },
   subTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   vipBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(255,215,0,0.15)', borderRadius: 10,
+    backgroundColor: 'rgba(255,215,0,0.18)', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)',
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.45)',
   },
   vipBadgeTxt: { color: '#FFD700', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  activePill: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  activePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(76, 175, 80, 0.12)',
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.35)',
+  },
+  activeDotWrap: { width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
   activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4CAF50' },
-  activeLabel: { color: '#4CAF50', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3, marginBottom: 3 },
+  activeDotRing: {
+    position: 'absolute',
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#4CAF50',
+  },
+  activeLabel: { color: '#4CAF50', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
+  subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3 },
+  subTitleActive: {
+    color: '#FFF',
+    textShadowColor: 'rgba(240, 168, 255, 0.85)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
   subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 16 },
   perksWrap: { gap: 8, marginBottom: 20 },
   perkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -237,8 +440,11 @@ const st = StyleSheet.create({
   subFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
   subPrice: {},
   subPriceAmt: { color: '#EEE', fontSize: 18, fontWeight: '700' },
-  subBtn: { paddingHorizontal: 22, paddingVertical: 11, borderRadius: 24 },
-  subBtnActivate: { backgroundColor: '#8B21E8' },
+  subBtnWrap: { borderRadius: 24, overflow: 'hidden' },
+  subBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 22, paddingVertical: 11, borderRadius: 24,
+  },
   subBtnCancel: { backgroundColor: 'rgba(255,80,80,0.22)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.45)' },
   subBtnTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
