@@ -240,6 +240,7 @@ function runDemoAI(g: GS, c: { left: boolean; right: boolean; thrust: boolean; f
 /* ─── Component ──────────────────────────────────────────────────────── */
 export default function AsteroidsGame() {
   const [area, setArea] = useState({ w: 0, h: 0 });
+  const [gameAreaSize, setGameAreaSize] = useState({ w: 0, h: 0 });
   const [, setTick] = useState(0);
   const [newHS, setNewHS] = useState(false);
 
@@ -978,10 +979,36 @@ export default function AsteroidsGame() {
   // so the TITLE sits cleanly above and INSERT COIN sits cleanly below.
   const isDemoLayout = (!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null;
 
+  // Demo-box dimensions — identical formula to TetrisGame so both previews are the same size
+  const demoCell = Math.max(8, Math.floor(Math.min(
+    (gameAreaSize.w - 24) / 10,
+    (gameAreaSize.h - 310) / 20,
+  )));
+  const demoBoardPxW = demoCell * 10;
+  const demoBoardPxH = demoCell * 20;
+
   return (
     <View ref={rootRef} style={s.root}>
+      {/* ── Measurement + centering wrapper (mirrors TetrisGame's gameArea) ── */}
+      <View
+        style={[
+          s.gameArea,
+          isDemoLayout && { paddingTop: 160, paddingBottom: 150, alignItems: 'center' },
+        ]}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setGameAreaSize({ w: width, h: height });
+        }}
+      >
       {/* ── Game canvas — full-screen during play, boxed during demo ── */}
-      <View style={[s.canvas, isDemoLayout && s.canvasDemo]} onLayout={onLayout}>
+      <View
+        style={[
+          s.canvas,
+          isDemoLayout && s.canvasDemo,
+          isDemoLayout && { width: demoBoardPxW, height: demoBoardPxH, flex: undefined },
+        ]}
+        onLayout={onLayout}
+      >
 
         {/* Asteroids — SVG polygons on web, rounded fallback on native */}
         {g?.asteroids.map((a) => {
@@ -1287,6 +1314,7 @@ export default function AsteroidsGame() {
           </View>
         )}
       </View>
+      </View>{/* end gameArea */}
 
       {/* ── Idle / title screen — sibling of the canvas so the title can sit
             above the boxed preview and INSERT COIN can sit below it. ── */}
@@ -1321,13 +1349,12 @@ export default function AsteroidsGame() {
 /* ─── Styles ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  gameArea: { flex: 1 },
   canvas: { flex: 1, overflow: 'hidden' },
   canvasDemo: {
-    marginTop: 160,
-    marginBottom: 150,
-    marginHorizontal: 8,
     borderWidth: 1,
     borderColor: '#222',
+    overflow: 'hidden',
   },
 
   bullet: {
