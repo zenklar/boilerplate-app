@@ -49,7 +49,7 @@ const SPEEDS: Record<string, [number, number]> = {
 const SCORE_MAP: Record<string, number> = { large: 20, medium: 50, small: 100 };
 
 type Size = 'large' | 'medium' | 'small';
-type Phase = 'idle' | 'intro' | 'playing' | 'gameover';
+type Phase = 'idle' | 'demo' | 'intro' | 'playing' | 'gameover';
 
 interface Asteroid {
   id: number;
@@ -143,6 +143,29 @@ function asteroidPoints(a: Asteroid): string {
 }
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+
+/** Demo-mode AI: rotates the ship toward the nearest asteroid (with bullet
+ *  lead) and fires when aligned. Ship doesn't thrust — it drifts only after a
+ *  collision teleport. */
+function runDemoAI(g: GS, c: { left: boolean; right: boolean; thrust: boolean; fire: boolean; fireCD: number }) {
+  c.left = false; c.right = false; c.thrust = false; c.fire = false;
+  if (g.asteroids.length === 0) return;
+  let nearest = g.asteroids[0];
+  let nDist = d2(g.sx, g.sy, nearest.x, nearest.y);
+  for (const a of g.asteroids) {
+    const dd = d2(g.sx, g.sy, a.x, a.y);
+    if (dd < nDist) { nDist = dd; nearest = a; }
+  }
+  const dist = Math.sqrt(nDist);
+  const leadT = dist / BULLET_SPEED;
+  const tx = nearest.x + nearest.vx * leadT;
+  const ty = nearest.y + nearest.vy * leadT;
+  const targetAngle = Math.atan2(ty - g.sy, tx - g.sx) * (180 / Math.PI) + 90;
+  let diff = ((targetAngle - g.sAngle + 540) % 360) - 180;
+  const step = Math.min(ROT_SPD, Math.abs(diff));
+  g.sAngle += Math.sign(diff) * step;
+  c.fire = Math.abs(diff) < 5;
+}
 
 /* ─── Component ──────────────────────────────────────────────────────── */
 export default function AsteroidsGame() {
@@ -298,13 +321,17 @@ export default function AsteroidsGame() {
         return;
       }
 
-      if (!g || g.phase !== 'playing') { setTick((t) => t + 1); return; }
+      if (!g || (g.phase !== 'playing' && g.phase !== 'demo')) { setTick((t) => t + 1); return; }
 
+      const isDemo = g.phase === 'demo';
       frame.current++;
       const c = ctrl.current;
 
+      /* Demo: AI controls the ship (sets sAngle directly + ctrl.fire) */
+      if (isDemo) runDemoAI(g, c);
+
       /* Mouse aim on web (overrides arrow-key rotation if mouse moved recently) */
-      if (Platform.OS === 'web') {
+      if (!isDemo && Platform.OS === 'web') {
         const { x: mx, y: my } = mousePos.current;
         const { x: ox, y: oy } = canvasOrigin.current;
         const dx = mx - ox - g.sx;
@@ -316,7 +343,7 @@ export default function AsteroidsGame() {
         // Arrow keys still work on web for rotation (override mouse aim)
         if (c.left) g.sAngle -= ROT_SPD;
         if (c.right) g.sAngle += ROT_SPD;
-      } else {
+      } else if (!isDemo) {
         if (c.left) g.sAngle -= ROT_SPD;
         if (c.right) g.sAngle += ROT_SPD;
       }
@@ -376,7 +403,7 @@ export default function AsteroidsGame() {
         });
         c.fireCD = FIRE_CD;
         g.bulletsShot++;
-        if (Platform.OS === 'web') playShoot();
+        if (Platform.OS === 'web' && !isDemo) playShoot();
       }
       if (c.fireCD > 0) c.fireCD--;
 
@@ -423,7 +450,7 @@ export default function AsteroidsGame() {
                 size: rand(2.5, a.size === 'large' ? 7 : 5), kind: 'debris',
               });
             }
-            if (Platform.OS === 'web') playExplosion(a.size);
+            if (Platform.OS === 'web' && !isDemo) playExplosion(a.size);
             if (a.size === 'large') {
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
@@ -441,6 +468,13 @@ export default function AsteroidsGame() {
       if (g.sInv === 0) {
         for (const a of g.asteroids) {
           if (d2(g.sx, g.sy, a.x, a.y) < (a.radius * 0.8 + 9) ** 2) {
+            if (isDemo) {
+              // Demo never ends — teleport to center with brief invincibility
+              g.sx = W / 2; g.sy = H / 2;
+              g.svx = 0; g.svy = 0;
+              g.sInv = 60;
+              break;
+            }
             g.lives--;
             if (g.lives <= 0) {
               if (Platform.OS === 'web' && thrustSoundRef.current) {
@@ -522,11 +556,17 @@ export default function AsteroidsGame() {
       thrustSoundRef.current = null;
     }
     setIsGamePlaying(false);
+    const { w: W, h: H } = dimRef.current;
     if (gsRef.current) {
-      gsRef.current.phase = 'idle';
-      gsRef.current.asteroids = [];
+      gsRef.current.phase = 'demo';
+      const sx = W / 2, sy = H / 2;
+      gsRef.current.sx = sx; gsRef.current.sy = sy;
+      gsRef.current.svx = 0; gsRef.current.svy = 0;
+      gsRef.current.sAngle = 0; gsRef.current.sInv = 0;
+      gsRef.current.score = 0; gsRef.current.lives = 3; gsRef.current.level = 1;
       gsRef.current.bullets = [];
       gsRef.current.particles = [];
+      gsRef.current.asteroids = W > 0 && H > 0 ? mkLevel(1, W, H, sx, sy) : [];
     }
     ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
     joyActive.current = false;
@@ -618,10 +658,11 @@ export default function AsteroidsGame() {
       pendingStart.current = false;
       initNewGame(width, gameH);
     } else if (!gsRef.current && width > 0 && height > 0) {
+      const sx = width / 2, sy = gameH / 2;
       gsRef.current = {
-        phase: 'idle',
-        sx: width / 2, sy: gameH / 2, svx: 0, svy: 0, sAngle: 0, sInv: 0,
-        bullets: [], particles: [], asteroids: [],
+        phase: 'demo',
+        sx, sy, svx: 0, svy: 0, sAngle: 0, sInv: 0,
+        bullets: [], particles: [], asteroids: mkLevel(1, width, gameH, sx, sy),
         score: 0, lives: 3, level: 1,
         bulletsShot: 0, asteroidsDestroyed: 0, startTime: 0,
       };
@@ -715,13 +756,13 @@ export default function AsteroidsGame() {
           );
         })}
 
-        {/* Bullets — only during active play */}
-        {g?.phase === 'playing' && g.bullets.map((b, i) => (
+        {/* Bullets — during active play or demo */}
+        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => (
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
-        {(g?.phase === 'playing' || g?.phase === 'intro') && g.particles.map((p) => {
+        {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p) => {
           const t = p.life / p.maxLife;
           let rgb: string;
           let opacity: number;
@@ -754,7 +795,7 @@ export default function AsteroidsGame() {
         })}
 
         {/* Ship — rendered on top of particles */}
-        {g && (g.phase === 'playing' || g.phase === 'intro') && (g.phase === 'intro' || shipVisible) && (
+        {g && (g.phase === 'playing' || g.phase === 'intro' || g.phase === 'demo') && (g.phase === 'intro' || shipVisible) && (
           <View style={{
             position: 'absolute',
             left: g.sx - SHIP_SIZE / 2,
@@ -766,7 +807,7 @@ export default function AsteroidsGame() {
         )}
 
         {/* ── HUD (score + high score + lives) ── */}
-        {g && (
+        {g && g.phase !== 'demo' && (
           <>
             <View style={s.hud}>
               <Text style={[s.hudScore, { fontFamily: MONO }]}>
@@ -793,31 +834,34 @@ export default function AsteroidsGame() {
           </Text>
         )}
 
-        {/* ── Idle / title screen ── */}
-        {(!g || g.phase === 'idle') && insertPhase === null && (
-          <View style={s.overlay}>
-            <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
-            <Text style={[s.yearText, { fontFamily: MONO }]}>1979</Text>
-            {highScore > 0 && (
-              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                HIGH SCORE   {highScore}
-              </Text>
-            )}
-            {Platform.OS === 'web' && (
-              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                Mouse aim · LMB thrust · Space to fire
-              </Text>
-            )}
-            <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
-              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
-                {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
-              </Text>
-            </Pressable>
-            <View style={s.coinHintRow}>
-              <View style={s.coinHintBadge}><Text style={s.coinHintBadgeLetter}>C</Text></View>
-              <Text style={[s.coinHint, { fontFamily: MONO }]}>
-                {coins > 0 ? `${coins} COIN${coins !== 1 ? 'S' : ''} AVAILABLE` : 'NO COINS — VISIT SHOP'}
-              </Text>
+        {/* ── Idle / title screen (demo plays behind it) ── */}
+        {(!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null && (
+          <View style={s.overlay} pointerEvents="box-none">
+            <View style={s.overlayTop} pointerEvents="box-none">
+              <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
+              {highScore > 0 && (
+                <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+                  HIGH SCORE   {highScore}
+                </Text>
+              )}
+            </View>
+            <View style={s.overlayBottom} pointerEvents="box-none">
+              <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
+                <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
+                  {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
+                </Text>
+              </Pressable>
+              <View style={s.coinHintRow}>
+                <View style={s.coinHintBadge}><Text style={s.coinHintBadgeLetter}>C</Text></View>
+                <Text style={[s.coinHint, { fontFamily: MONO }]}>
+                  {coins > 0 ? `${coins} COIN${coins !== 1 ? 'S' : ''} AVAILABLE` : 'NO COINS — VISIT SHOP'}
+                </Text>
+              </View>
+              {Platform.OS === 'web' && (
+                <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+                  Mouse aim · LMB thrust · Space to fire
+                </Text>
+              )}
             </View>
           </View>
         )}
@@ -964,11 +1008,15 @@ const s = StyleSheet.create({
   },
   webIdleHint: { color: '#999', fontSize: 12, letterSpacing: 1 },
 
-  // Title/idle overlay — transparent so drifting asteroids show through
+  // Title/idle overlay — transparent so the autoplay demo shows through.
+  // Title pinned to the top, button + hints pinned to the bottom.
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center', alignItems: 'center', gap: 14,
+    justifyContent: 'space-between', alignItems: 'center',
+    paddingTop: 40, paddingBottom: 50,
   },
+  overlayTop: { alignItems: 'center', gap: 10 },
+  overlayBottom: { alignItems: 'center', gap: 10 },
   // Game-over overlay — solid black so nothing bleeds through
   gameOverOverlay: {
     ...StyleSheet.absoluteFillObject,
