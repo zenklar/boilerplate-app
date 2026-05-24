@@ -31,7 +31,8 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+# .env*.local  -- temporarily allowing env files during development
+# .env
 
 # typescript
 *.tsbuildinfo
@@ -40,4 +41,4 @@ yarn-error.*
 /ios
 /android
 
-.env
+# .env
