@@ -42,7 +42,7 @@ function Sparkle({ delay, left, top, size }: { delay: number; left: number; top:
         transform: [{ scale }, { translateY }],
       }}
     >
-      <Ionicons name="sparkles" size={size} color="#F0A8FF" />
+      <Ionicons name="sparkles" size={size} color="#FFE066" />
     </Animated.View>
   );
 }
@@ -102,7 +102,7 @@ function SubscriptionTile() {
   const dotOpacity = dotPulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0.2] });
   const borderColor = hue.interpolate({
     inputRange: [0, 0.33, 0.66, 1],
-    outputRange: ['#D946EF', '#A855F7', '#EC4899', '#D946EF'],
+    outputRange: ['#FFD700', '#FFC107', '#FFEA70', '#FFD700'],
   });
 
   return (
@@ -111,7 +111,7 @@ function SubscriptionTile() {
       {isSubscribed && (
         <Animated.View pointerEvents="none" style={[st.haloWrap, { opacity: glowOpacity }]}>
           <LinearGradient
-            colors={['rgba(217,70,239,0.0)', 'rgba(217,70,239,0.55)', 'rgba(168,85,247,0.55)', 'rgba(217,70,239,0.0)']}
+            colors={['rgba(255,215,0,0.0)', 'rgba(255,215,0,0.65)', 'rgba(255,170,40,0.6)', 'rgba(255,215,0,0.0)']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
@@ -121,7 +121,7 @@ function SubscriptionTile() {
       <View style={[st.subCard, isSubscribed && st.subCardActive]}>
         <LinearGradient
           colors={isSubscribed
-            ? ['#1A0540', '#3B0F7A', '#5B179C', '#3B0F7A', '#1A0540']
+            ? ['#3A2200', '#7A4A00', '#A8730B', '#7A4A00', '#3A2200']
             : ['#080420', '#160840', '#0C0635', '#1A0A48', '#080420']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -139,7 +139,7 @@ function SubscriptionTile() {
         {/* Radial-ish purple highlight via stacked gradients */}
         <LinearGradient
           colors={isSubscribed
-            ? ['rgba(236,72,153,0.18)', 'transparent', 'rgba(168,85,247,0.20)']
+            ? ['rgba(255,215,0,0.22)', 'transparent', 'rgba(255,170,40,0.22)']
             : ['transparent', 'rgba(192,80,255,0.10)', 'transparent']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -150,7 +150,7 @@ function SubscriptionTile() {
         {isSubscribed && (
           <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }, { skewX: '-20deg' }] }]} pointerEvents="none">
             <LinearGradient
-              colors={['transparent', 'rgba(255,180,255,0.35)', 'rgba(255,255,255,0.55)', 'rgba(255,180,255,0.35)', 'transparent']}
+              colors={['transparent', 'rgba(255,225,120,0.45)', 'rgba(255,255,235,0.7)', 'rgba(255,225,120,0.45)', 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
@@ -161,7 +161,7 @@ function SubscriptionTile() {
         {isSubscribed && (
           <Animated.View style={[st.shimmer2, { transform: [{ translateX: shim2Translate }, { skewX: '-20deg' }] }]} pointerEvents="none">
             <LinearGradient
-              colors={['transparent', 'rgba(236,72,153,0.45)', 'transparent']}
+              colors={['transparent', 'rgba(255,180,40,0.55)', 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
@@ -208,10 +208,10 @@ function SubscriptionTile() {
         <View style={st.titleRow}>
           <Text style={[st.subTitle, isSubscribed && st.subTitleActive]}>Arcade Pass</Text>
           {isSubscribed && (
-            <Ionicons name="flash" size={20} color="#F0A8FF" style={{ marginLeft: 6 }} />
+            <Ionicons name="flash" size={20} color="#FFD700" style={{ marginLeft: 6 }} />
           )}
         </View>
-        <Text style={[st.subSubtitle, isSubscribed && { color: '#E9D5FF' }]}>
+        <Text style={[st.subSubtitle, isSubscribed && { color: '#FFE9A8' }]}>
           {isSubscribed ? '✨ Unlimited plays unlocked' : 'Unlimited plays across all games'}
         </Text>
 
@@ -221,9 +221,9 @@ function SubscriptionTile() {
               <Ionicons
                 name="checkmark-circle"
                 size={14}
-                color={isSubscribed ? '#F0A8FF' : '#E040FB'}
+                color={isSubscribed ? '#FFD700' : '#E040FB'}
               />
-              <Text style={[st.perkText, isSubscribed && { color: '#F3E8FF' }]}>{p}</Text>
+              <Text style={[st.perkText, isSubscribed && { color: '#FFF4D1' }]}>{p}</Text>
             </View>
           ))}
         </View>
@@ -382,18 +382,18 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(160, 80, 255, 0.4)',
   },
   subCardActive: {
-    borderColor: 'rgba(217, 70, 239, 0.7)',
-    shadowColor: '#D946EF',
+    borderColor: 'rgba(255, 215, 0, 0.8)',
+    shadowColor: '#FFD700',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
-    elevation: 10,
+    shadowOpacity: 0.65,
+    shadowRadius: 16,
+    elevation: 12,
   },
   scanLine: {
     position: 'absolute',
     left: 0, right: 0,
     height: 1,
-    backgroundColor: 'rgba(240, 168, 255, 0.06)',
+    backgroundColor: 'rgba(255, 230, 130, 0.07)',
   },
   shimmer: {
     position: 'absolute', top: 0, bottom: 0, width: 120,
@@ -412,26 +412,31 @@ const st = StyleSheet.create({
   vipBadgeTxt: { color: '#FFD700', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   activePill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(76, 175, 80, 0.12)',
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1, borderColor: 'rgba(76, 175, 80, 0.35)',
+    backgroundColor: '#0E0A02',
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 6,
   },
   activeDotWrap: { width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
-  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4CAF50' },
+  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFD700' },
   activeDotRing: {
     position: 'absolute',
     width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FFE066',
   },
-  activeLabel: { color: '#4CAF50', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  activeLabel: { color: '#FFD700', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
   subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3 },
   subTitleActive: {
-    color: '#FFF',
-    textShadowColor: 'rgba(240, 168, 255, 0.85)',
+    color: '#FFF6D1',
+    textShadowColor: 'rgba(255, 215, 0, 0.95)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 12,
   },
   subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 16 },
   perksWrap: { gap: 8, marginBottom: 20 },
