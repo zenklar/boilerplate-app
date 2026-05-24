@@ -45,6 +45,12 @@ export default function EnemyCodexScreen() {
 
   const killedCount = ENEMIES.filter((e) => killed[e.id]).length;
   const encCount = ENEMIES.filter((e) => encountered[e.id]).length;
+  const encOnlyCount = encCount - killedCount;
+  const total = ENEMIES.length;
+  const killedFrac = killedCount / total;
+  const encOnlyFrac = encOnlyCount / total;
+  // Overall completion: encountered = half credit, killed = full credit.
+  const progressPct = Math.round(((killedCount + encCount) / (total * 2)) * 100);
 
   // Tint for the preview image — silhouette when undiscovered
   const previewTint =
@@ -98,6 +104,31 @@ export default function EnemyCodexScreen() {
         </View>
       </View>
 
+      {/* ── Total progress bar ── */}
+      <View style={styles.progressBox}>
+        <View style={styles.progressLabelRow}>
+          <Text style={[styles.progressLabel, { fontFamily: MONO }]}>CODEX PROGRESS</Text>
+          <Text style={[styles.progressLabel, { fontFamily: MONO, color: '#FFF' }]}>
+            {progressPct}%
+          </Text>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressKilled, { flex: killedFrac }]} />
+          <View style={[styles.progressEnc, { flex: encOnlyFrac }]} />
+          <View style={{ flex: Math.max(0, 1 - killedFrac - encOnlyFrac) }} />
+        </View>
+        <View style={styles.progressLegendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: '#2E7D32' }]} />
+            <Text style={[styles.legendTxt, { fontFamily: MONO }]}>DEFEATED</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: '#FFD54F' }]} />
+            <Text style={[styles.legendTxt, { fontFamily: MONO }]}>ENCOUNTERED</Text>
+          </View>
+        </View>
+      </View>
+
       {/* ── Enemy grid ── */}
       <ScrollView
         style={styles.scroll}
@@ -115,7 +146,6 @@ export default function EnemyCodexScreen() {
               style={({ pressed }: { pressed: boolean }) => [
                 styles.card,
                 { width: cardW, height: cardH },
-                status === 'killed' && styles.cardKilled,
                 isPreviewed && styles.cardPreviewed,
                 status === 'unknown' && !isPreviewed && styles.cardLocked,
                 pressed && styles.cardPressed,
@@ -210,8 +240,34 @@ const styles = StyleSheet.create({
     gap: 6,
     position: 'relative',
   },
-  cardKilled: { borderColor: '#2E7D32', backgroundColor: '#06140A' },
   cardPreviewed: { borderColor: '#FF6D00', borderWidth: 1.5, backgroundColor: '#120A00' },
+
+  progressBox: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1A',
+    gap: 6,
+  },
+  progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel: { color: '#777', fontSize: 10, letterSpacing: 2 },
+  progressTrack: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#101010',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  progressKilled: { backgroundColor: '#2E7D32' },
+  progressEnc: { backgroundColor: '#FFD54F' },
+  progressLegendRow: { flexDirection: 'row', gap: 16, marginTop: 2 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendSwatch: { width: 9, height: 9, borderRadius: 2 },
+  legendTxt: { color: '#666', fontSize: 9, letterSpacing: 1 },
+
   cardLocked: { borderColor: '#111' },
   cardPressed: { opacity: 0.75 },
 
