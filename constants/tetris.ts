@@ -38,15 +38,15 @@ export const TETROMINOS: Record<TetrominoType, number[][][]> = {
   ],
 };
 
-// Classic NES Tetris-ish palette, tuned for the arcade pixel look.
+// Classic monochrome arcade look — every block is white.
 export const TETROMINO_COLORS: Record<TetrominoType, string> = {
-  I: '#4DD8FF',
-  O: '#FFD24A',
-  T: '#C77DFF',
-  S: '#5BE26B',
-  Z: '#FF5B5B',
-  J: '#4D7AFF',
-  L: '#FF9A3C',
+  I: '#FFFFFF',
+  O: '#FFFFFF',
+  T: '#FFFFFF',
+  S: '#FFFFFF',
+  Z: '#FFFFFF',
+  J: '#FFFFFF',
+  L: '#FFFFFF',
 };
 
 export const BOARD_W = 10;
@@ -55,9 +55,10 @@ export const BOARD_H = 20;
 // Score table (BPS): bonus per simultaneous line clear, multiplied by level.
 export const LINE_SCORE = [0, 40, 100, 300, 1200];
 
-// Frames per cell drop at each level (1 frame = 16ms tick).
+// Frames per cell drop at each level (1 frame = 16ms tick). Faster than NES
+// so the arcade pace feels snappier from the very first level.
 export const DROP_FRAMES_PER_LEVEL = (level: number): number => {
-  const table = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2];
+  const table = [28, 25, 22, 19, 16, 14, 12, 10, 8, 6, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2];
   return table[Math.min(level - 1, table.length - 1)] ?? 2;
 };
 

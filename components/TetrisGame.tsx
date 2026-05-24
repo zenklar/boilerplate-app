@@ -8,7 +8,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 import {
-  TETROMINOS, TETROMINO_COLORS, TETROMINO_TYPES,
+  TETROMINOS, TETROMINO_TYPES,
   TetrominoType, BOARD_W, BOARD_H, LINE_SCORE, DROP_FRAMES_PER_LEVEL,
 } from '../constants/tetris';
 import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed } from '../utils/sounds';
@@ -16,19 +16,28 @@ import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountd
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
 const SOFT_DROP_DIVISOR = 6; // soft drop falls this many cells per gravity tick
-const MOVE_REPEAT_DELAY = 10;
-const MOVE_REPEAT_INTERVAL = 3;
+const FAST_DROP_FRAMES = 1;  // Space-held fast drop — one cell per frame
 const LOCK_DELAY_FRAMES = 30;
+const NEXT_QUEUE_LEN = 3;
 const CTRL_H = Platform.OS === 'web' ? 0 : 150;
 
-type Phase = 'idle' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
+const PARTICLE_LIFE = 32;
+
+type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
 type Cell = TetrominoType | null;
 type Active = { type: TetrominoType; rot: number; x: number; y: number };
+type Particle = {
+  id: number;
+  x: number; y: number;
+  vx: number; vy: number;
+  life: number;
+  size: number;
+};
 
 type GS = {
   board: Cell[][];
   active: Active | null;
-  nextType: TetrominoType;
+  nextQueue: TetrominoType[];
   bag: TetrominoType[];
   score: number;
   lines: number;
@@ -37,7 +46,14 @@ type GS = {
   lockTimer: number;
   startTime: number;
   topOut: boolean;
+  particles: Particle[];
+  // Demo-only: AI target for the active piece
+  demoTarget: { x: number; rot: number } | null;
 };
+
+let _nid = 1;
+const uid = () => _nid++;
+const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
 const shape = (a: Active) => TETROMINOS[a.type][a.rot % TETROMINOS[a.type].length];
 
@@ -98,6 +114,58 @@ function ghostY(board: Cell[][], a: Active): number {
   return g.y;
 }
 
+function fillQueueFromBag(queue: TetrominoType[], bag: TetrominoType[]): {
+  queue: TetrominoType[]; bag: TetrominoType[];
+} {
+  let q = [...queue], b = [...bag];
+  while (q.length < NEXT_QUEUE_LEN) {
+    b = refillBag(b);
+    q.push(b.shift()!);
+  }
+  return { queue: q, bag: b };
+}
+
+/** Spawn debris particles for every block in the given board rows. */
+function spawnLineParticles(rows: number[], board: Cell[][]): Particle[] {
+  const out: Particle[] = [];
+  for (const y of rows) {
+    for (let x = 0; x < BOARD_W; x++) {
+      if (!board[y][x]) continue;
+      // Each block bursts into a few pixel-sized particles
+      const n = 5;
+      for (let i = 0; i < n; i++) {
+        const dir = rand(0, Math.PI * 2);
+        const spd = rand(0.15, 0.55);
+        out.push({
+          id: uid(),
+          x: x + 0.5 + rand(-0.25, 0.25),
+          y: y + 0.5 + rand(-0.25, 0.25),
+          vx: Math.cos(dir) * spd,
+          vy: Math.sin(dir) * spd - 0.1,
+          life: PARTICLE_LIFE,
+          size: rand(0.18, 0.32),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Pick a random valid (x, rot) landing target for the demo AI. */
+function pickDemoTarget(g: GS): { x: number; rot: number } {
+  if (!g.active) return { x: 0, rot: 0 };
+  const a = g.active;
+  const rots = TETROMINOS[a.type].length;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const rot = Math.floor(Math.random() * rots);
+    const m = TETROMINOS[a.type][rot];
+    const w = m[0].length;
+    const x = Math.floor(Math.random() * (BOARD_W - w + 1));
+    if (!collides(g.board, { ...a, rot, x, y: a.y })) return { x, rot };
+  }
+  return { x: a.x, rot: a.rot };
+}
+
 export default function TetrisGame() {
   const [, setTick] = useState(0);
   const [area, setArea] = useState({ w: 0, h: 0 });
@@ -123,8 +191,8 @@ export default function TetrisGame() {
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
 
   const gsRef = useRef<GS | null>(null);
-  // Input state
-  const heldRef = useRef<{ left: number; right: number; down: boolean }>({ left: 0, right: 0, down: false });
+  // Input state — `fast` is the held-Space "speed it down" boost
+  const heldRef = useRef<{ down: boolean; fast: boolean }>({ down: false, fast: false });
 
   useEffect(() => {
     loadHighScore(); loadRuns();
@@ -132,12 +200,16 @@ export default function TetrisGame() {
     useSubscriptionStore.getState().loadSubscription();
   }, []);
 
+  // Boot the demo loop on first mount (and whenever we return to the menu).
+  useEffect(() => {
+    if (phase === 'idle' && !gsRef.current) startDemo();
+  }, [phase]);
+
   /* ── Keyboard controls (web) ── */
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
       if (phase !== 'playing') return;
-      const g = gsRef.current; if (!g || !g.active) return;
       switch (e.code) {
         case 'ArrowLeft': case 'KeyA':
           if (!e.repeat) tryMove(-1, 0);
@@ -156,12 +228,13 @@ export default function TetrisGame() {
           break;
         case 'Space':
           e.preventDefault();
-          if (!e.repeat) hardDrop();
+          heldRef.current.fast = true;
           break;
       }
     };
     const onUp = (e: KeyboardEvent) => {
       if (e.code === 'ArrowDown' || e.code === 'KeyS') heldRef.current.down = false;
+      if (e.code === 'Space') heldRef.current.fast = false;
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('keyup', onUp);
@@ -174,26 +247,61 @@ export default function TetrisGame() {
   /* ── Game loop ── */
   useEffect(() => {
     const id = setInterval(() => {
-      if (phase !== 'playing') return;
+      if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
-      if (!g || !g.active) return;
+      if (!g) return;
+
+      const isDemo = phase === 'demo';
+
+      // Advance particles (positions in board-cell units)
+      if (g.particles.length > 0) {
+        g.particles = g.particles
+          .map((p) => ({
+            ...p,
+            x: p.x + p.vx,
+            y: p.y + p.vy,
+            vy: p.vy + 0.02, // mild gravity
+            life: p.life - 1,
+          }))
+          .filter((p) => p.life > 0);
+      }
+
+      if (!g.active) { setTick((t) => t + 1); return; }
+
+      // Demo AI: rotate toward target, slide toward target x, then fast-drop.
+      if (isDemo) {
+        heldRef.current.fast = false;
+        if (!g.demoTarget) g.demoTarget = pickDemoTarget(g);
+        const t = g.demoTarget;
+        if (g.active.rot !== t.rot) {
+          tryRotate(1);
+        } else if (g.active.x < t.x) {
+          tryMove(1, 0);
+        } else if (g.active.x > t.x) {
+          tryMove(-1, 0);
+        } else {
+          heldRef.current.fast = true;
+        }
+      }
 
       const gravity = DROP_FRAMES_PER_LEVEL(g.level);
-      const effective = heldRef.current.down ? Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR)) : gravity;
+      let effective = gravity;
+      if (heldRef.current.fast) effective = FAST_DROP_FRAMES;
+      else if (heldRef.current.down) effective = Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR));
+
       g.dropAccum++;
       if (g.dropAccum >= effective) {
         g.dropAccum = 0;
         const moved = { ...g.active, y: g.active.y + 1 };
         if (collides(g.board, moved)) {
-          // Try lock after a short delay so player can still slide
           g.lockTimer++;
-          if (g.lockTimer >= LOCK_DELAY_FRAMES) {
-            lockPiece();
+          if (g.lockTimer >= LOCK_DELAY_FRAMES || heldRef.current.fast) {
+            lockPiece(isDemo);
           }
         } else {
           g.active = moved;
           g.lockTimer = 0;
-          if (heldRef.current.down) g.score += 1; // soft drop bonus
+          if (!isDemo && heldRef.current.down) g.score += 1; // soft drop bonus
         }
       }
       setTick((t) => t + 1);
@@ -201,40 +309,64 @@ export default function TetrisGame() {
     return () => clearInterval(id);
   }, [phase]);
 
-  function pickNext(g: GS): TetrominoType {
-    g.bag = refillBag(g.bag);
-    return g.bag.shift()!;
+  function shiftQueue(g: GS): TetrominoType {
+    const t = g.nextQueue.shift()!;
+    const refilled = fillQueueFromBag(g.nextQueue, g.bag);
+    g.nextQueue = refilled.queue;
+    g.bag = refilled.bag;
+    return t;
   }
 
-  function spawnNext() {
+  function spawnNext(isDemo: boolean) {
     const g = gsRef.current!;
-    const t = g.nextType;
+    const t = shiftQueue(g);
     g.active = spawnActive(t);
-    g.nextType = pickNext(g);
     g.dropAccum = 0;
     g.lockTimer = 0;
+    g.demoTarget = null;
     if (collides(g.board, g.active)) {
-      // Top-out
-      gameOver();
+      if (isDemo) {
+        // Reset the board so the preview never freezes
+        g.board = emptyBoard();
+        g.particles = [];
+        // Try again from a clean slate
+        if (collides(g.board, g.active)) {
+          // Shouldn't happen, but bail safely
+          g.active = null;
+        }
+      } else {
+        gameOver();
+      }
     }
   }
 
-  function lockPiece() {
+  function lockPiece(isDemo: boolean) {
     const g = gsRef.current!;
     if (!g.active) return;
-    let board = place(g.board, g.active);
-    const { board: cleaned, cleared } = clearFull(board);
+    const placed = place(g.board, g.active);
+    // Find which rows are full BEFORE collapsing so we can emit particles.
+    const fullRows: number[] = [];
+    for (let y = 0; y < BOARD_H; y++) {
+      if (placed[y].every((c) => c !== null)) fullRows.push(y);
+    }
+    const { board: cleaned, cleared } = clearFull(placed);
     g.board = cleaned;
     if (cleared > 0) {
-      g.score += LINE_SCORE[cleared] * g.level;
-      g.lines += cleared;
-      const newLevel = Math.floor(g.lines / 10) + 1;
-      if (newLevel !== g.level) g.level = newLevel;
-      if (Platform.OS === 'web') playExplosion(cleared >= 4 ? 'large' : cleared >= 2 ? 'medium' : 'small');
-    } else if (Platform.OS === 'web') {
+      const burst = spawnLineParticles(fullRows, placed);
+      g.particles = [...g.particles, ...burst];
+      if (!isDemo) {
+        g.score += LINE_SCORE[cleared] * g.level;
+        g.lines += cleared;
+        const newLevel = Math.floor(g.lines / 10) + 1;
+        if (newLevel !== g.level) g.level = newLevel;
+      }
+      if (Platform.OS === 'web' && !isDemo) {
+        playExplosion(cleared >= 4 ? 'large' : cleared >= 2 ? 'medium' : 'small');
+      }
+    } else if (Platform.OS === 'web' && !isDemo) {
       playShoot();
     }
-    spawnNext();
+    spawnNext(isDemo);
   }
 
   function tryMove(dx: number, dy: number) {
@@ -265,16 +397,6 @@ export default function TetrisGame() {
     }
   }
 
-  function hardDrop() {
-    const g = gsRef.current; if (!g || !g.active) return;
-    const startY = g.active.y;
-    const dropY = ghostY(g.board, g.active);
-    g.score += (dropY - startY) * 2;
-    g.active = { ...g.active, y: dropY };
-    lockPiece();
-    setTick((t) => t + 1);
-  }
-
   function gameOver() {
     const g = gsRef.current; if (!g) return;
     g.topOut = true;
@@ -295,21 +417,49 @@ export default function TetrisGame() {
   }
 
   function startFreshGame() {
-    const initialBag = refillBag([]);
-    const firstType = initialBag.shift()!;
-    const secondType = initialBag.shift()!;
+    const firstType = refillBag([]).shift()!;
+    let queue: TetrominoType[] = [];
+    let bag: TetrominoType[] = refillBag([]);
+    // First piece already pulled — fill the visible NEXT queue
+    const f = fillQueueFromBag(queue, bag);
+    queue = f.queue; bag = f.bag;
     gsRef.current = {
       board: emptyBoard(),
       active: spawnActive(firstType),
-      nextType: secondType,
-      bag: initialBag,
+      nextQueue: queue,
+      bag,
       score: 0, lines: 0, level: 1,
       dropAccum: 0, lockTimer: 0,
       startTime: Date.now(),
       topOut: false,
+      particles: [],
+      demoTarget: null,
     };
+    // Reset input state so any keys still held don't leak in
+    heldRef.current = { down: false, fast: false };
     setIsGamePlaying(true);
     setPhase('playing');
+  }
+
+  function startDemo() {
+    const firstType = refillBag([]).shift()!;
+    let queue: TetrominoType[] = [];
+    let bag: TetrominoType[] = refillBag([]);
+    const f = fillQueueFromBag(queue, bag);
+    queue = f.queue; bag = f.bag;
+    gsRef.current = {
+      board: emptyBoard(),
+      active: spawnActive(firstType),
+      nextQueue: queue,
+      bag,
+      score: 0, lines: 0, level: 1,
+      dropAccum: 0, lockTimer: 0,
+      startTime: Date.now(),
+      topOut: false,
+      particles: [],
+      demoTarget: null,
+    };
+    setPhase('demo');
   }
 
   /* ── Coin → countdown → start flow (mirrors Asteroids) ── */
@@ -362,6 +512,9 @@ export default function TetrisGame() {
       return;
     }
     if (!isSubscribed) spendCoin();
+    // Stop the demo so it doesn't keep churning behind the coin/countdown UI.
+    gsRef.current = null;
+    heldRef.current = { down: false, fast: false };
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
@@ -369,7 +522,7 @@ export default function TetrisGame() {
     gsRef.current = null;
     setIsGamePlaying(false);
     setNewHS(false);
-    setPhase('idle');
+    setPhase('idle'); // boot-effect will restart the demo
   }, []);
 
   /* ── Layout ── */
@@ -388,15 +541,16 @@ export default function TetrisGame() {
   const boardPxH = CELL * BOARD_H;
 
   const g = gsRef.current;
+  const showBoard = g && (phase === 'playing' || phase === 'gameover' || phase === 'demo');
 
   // Compose display board: locked cells + active piece + ghost
   let displayCells: Cell[][] | null = null;
   let ghostCells: boolean[][] | null = null;
-  if (g && (phase === 'playing' || phase === 'gameover')) {
-    displayCells = g.board.map((r) => r.slice());
-    if (g.active) {
-      const a = g.active;
-      const gy = ghostY(g.board, a);
+  if (showBoard) {
+    displayCells = g!.board.map((r) => r.slice());
+    if (g!.active) {
+      const a = g!.active;
+      const gy = ghostY(g!.board, a);
       ghostCells = Array.from({ length: BOARD_H }, () => Array(BOARD_W).fill(false));
       const m = shape(a);
       for (let dy = 0; dy < m.length; dy++) {
@@ -416,9 +570,12 @@ export default function TetrisGame() {
     <View style={s.root} onLayout={onLayout}>
       {/* Game area */}
       <View style={s.gameArea}>
-        {/* Board */}
-        <View style={[s.board, { width: boardPxW, height: boardPxH }]}>
-          {/* Grid lines (pixel style) */}
+        {/* Board — Pressable so a left click rotates CW */}
+        <Pressable
+          onPress={() => { if (phase === 'playing') tryRotate(1); }}
+          style={[s.board, { width: boardPxW, height: boardPxH }]}
+        >
+          {/* Cells */}
           {Array.from({ length: BOARD_H * BOARD_W }).map((_, i) => {
             const y = Math.floor(i / BOARD_W);
             const x = i % BOARD_W;
@@ -435,13 +592,18 @@ export default function TetrisGame() {
                   height: CELL,
                   borderWidth: 1,
                   borderColor: '#0E0E0E',
-                  backgroundColor: cell ? TETROMINO_COLORS[cell] : '#070707',
+                  backgroundColor: cell ? '#FFFFFF' : '#070707',
                 }}
               >
                 {cell && (
+                  // Inner darker square for the classic pixel-block look
                   <View style={{
-                    position: 'absolute', left: 2, top: 2, right: 2, bottom: 2,
-                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+                    position: 'absolute',
+                    left: Math.max(2, CELL * 0.18),
+                    top: Math.max(2, CELL * 0.18),
+                    right: Math.max(2, CELL * 0.18),
+                    bottom: Math.max(2, CELL * 0.18),
+                    backgroundColor: '#9A9A9A',
                   }} />
                 )}
                 {isGhost && (
@@ -453,9 +615,29 @@ export default function TetrisGame() {
               </View>
             );
           })}
-        </View>
 
-        {/* Side panel — score / level / lines / next */}
+          {/* Particles (board-cell coordinates) */}
+          {showBoard && g!.particles.map((p) => {
+            const opacity = Math.min(1, p.life / PARTICLE_LIFE);
+            const px = CELL * p.size;
+            return (
+              <View
+                key={p.id}
+                style={{
+                  position: 'absolute',
+                  left: p.x * CELL - px / 2,
+                  top: p.y * CELL - px / 2,
+                  width: px,
+                  height: px,
+                  backgroundColor: '#FFFFFF',
+                  opacity,
+                }}
+              />
+            );
+          })}
+        </Pressable>
+
+        {/* Side panel — score / level / lines / next 3 */}
         <View style={[s.side, { width: sidePanelW }]}>
           <Text style={[s.sideLabel, { fontFamily: MONO }]}>SCORE</Text>
           <Text style={[s.sideValue, { fontFamily: MONO }]}>
@@ -470,24 +652,40 @@ export default function TetrisGame() {
             {g ? g.lines : 0}
           </Text>
           <Text style={[s.sideLabel, { fontFamily: MONO, marginTop: 8 }]}>NEXT</Text>
-          <View style={[s.nextBox, { width: CELL * 4 + 8, height: CELL * 3 + 8 }]}>
-            {g && phase === 'playing' && (() => {
-              const m = TETROMINOS[g.nextType][0];
-              const color = TETROMINO_COLORS[g.nextType];
-              return m.map((row, ry) =>
-                row.map((v, rx) => v ? (
-                  <View key={`${ry}-${rx}`} style={{
-                    position: 'absolute',
-                    left: 4 + rx * CELL * 0.75,
-                    top: 4 + ry * CELL * 0.75,
-                    width: CELL * 0.75,
-                    height: CELL * 0.75,
-                    backgroundColor: color,
-                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-                  }} />
-                ) : null)
+          <View style={s.nextStack}>
+            {g && phase === 'playing' && g.nextQueue.slice(0, NEXT_QUEUE_LEN).map((type, idx) => {
+              const m = TETROMINOS[type][0];
+              const cellSize = CELL * (idx === 0 ? 0.7 : 0.5);
+              return (
+                <View
+                  key={idx}
+                  style={[s.nextBox, { width: cellSize * 4 + 8, height: cellSize * 2 + 8 }]}
+                >
+                  {m.map((row, ry) =>
+                    row.map((v, rx) => v ? (
+                      <View key={`${ry}-${rx}`} style={{
+                        position: 'absolute',
+                        left: 4 + rx * cellSize,
+                        top: 4 + ry * cellSize,
+                        width: cellSize,
+                        height: cellSize,
+                        backgroundColor: '#FFFFFF',
+                        borderWidth: 1, borderColor: '#222',
+                      }}>
+                        <View style={{
+                          position: 'absolute',
+                          left: Math.max(2, cellSize * 0.18),
+                          top: Math.max(2, cellSize * 0.18),
+                          right: Math.max(2, cellSize * 0.18),
+                          bottom: Math.max(2, cellSize * 0.18),
+                          backgroundColor: '#9A9A9A',
+                        }} />
+                      </View>
+                    ) : null)
+                  )}
+                </View>
               );
-            })()}
+            })}
           </View>
         </View>
       </View>
@@ -511,7 +709,7 @@ export default function TetrisGame() {
             </Pressable>
             {Platform.OS === 'web' && (
               <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                ← →  move · ↑  rotate · ↓  soft drop · Space  hard drop
+                ← →  move · click/↑  rotate · ↓  soft · Space  speed drop
               </Text>
             )}
           </View>
@@ -584,17 +782,14 @@ export default function TetrisGame() {
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⟳</Text>
           </Pressable>
           <Pressable
-            style={s.ctrlBtn}
-            onPressIn={() => { heldRef.current.down = true; }}
-            onPressOut={() => { heldRef.current.down = false; }}
+            style={[s.ctrlBtn, s.dropBtn]}
+            onPressIn={() => { heldRef.current.fast = true; }}
+            onPressOut={() => { heldRef.current.fast = false; }}
           >
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
           </Pressable>
           <Pressable style={s.ctrlBtn} onPressIn={() => tryMove(1, 0)}>
             <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
-          </Pressable>
-          <Pressable style={[s.ctrlBtn, s.dropBtn]} onPressIn={hardDrop}>
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⤓</Text>
           </Pressable>
         </View>
       )}
@@ -617,8 +812,8 @@ const s = StyleSheet.create({
   side: { gap: 4, paddingHorizontal: 4 },
   sideLabel: { color: '#666', fontSize: 10, letterSpacing: 2 },
   sideValue: { color: '#FFF', fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  nextStack: { gap: 4, marginTop: 2 },
   nextBox: {
-    marginTop: 2,
     backgroundColor: '#070707',
     borderWidth: 1, borderColor: '#1A1A1A',
     position: 'relative',
