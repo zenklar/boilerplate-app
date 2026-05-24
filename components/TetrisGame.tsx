@@ -647,10 +647,12 @@ export default function TetrisGame() {
   // space for the TETRIS title + INSERT COIN row so the falling pieces
   // sit cleanly between them instead of being covered by the overlay.
   const isDemoLayout = phase === 'idle' || phase === 'demo';
-  const demoReserveTop = 110;
-  const demoReserveBottom = 110;
+  // Enough margin so the title (+ high score) sits clear above the board
+  // and the INSERT COIN button + hint sits clear below it.
+  const demoReserveTop = 160;
+  const demoReserveBottom = 150;
   const sidePanelW = isDemoLayout ? 0 : Math.min(120, area.w * 0.3);
-  const maxByW = (area.w - sidePanelW - (isDemoLayout ? 16 : 40)) / BOARD_W;
+  const maxByW = (area.w - sidePanelW - (isDemoLayout ? 24 : 40)) / BOARD_W;
   const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : 40;
   const maxByH = (playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
