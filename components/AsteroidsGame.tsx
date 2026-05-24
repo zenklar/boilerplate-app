@@ -1010,6 +1010,9 @@ export default function AsteroidsGame() {
         onLayout={onLayout}
       >
 
+        {/* Game objects — scaled down in demo/preview mode so they look proportional in the smaller frame */}
+        <View style={[StyleSheet.absoluteFillObject, isDemoLayout && { transform: [{ scale: 0.65 }] }]}>
+
         {/* Asteroids — SVG polygons on web, rounded fallback on native */}
         {g?.asteroids.map((a) => {
           const d = a.radius * 2;
@@ -1183,6 +1186,8 @@ export default function AsteroidsGame() {
             <ShipPreview ship={selectedShip} size={SHIP_SIZE} />
           </View>
         )}
+
+        </View>{/* end game objects scale wrapper */}
 
         {/* ── HUD (score + high score + lives) ── */}
         {g && g.phase !== 'demo' && (
