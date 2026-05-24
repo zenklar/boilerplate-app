@@ -9,16 +9,18 @@ import ArcadeCoin from '../../components/ArcadeCoin';
 import AsteroidsGame from '../../components/AsteroidsGame';
 import ShipSelectScreen from '../../components/ShipSelectScreen';
 import LeaderboardScreen from '../../components/LeaderboardScreen';
+import EnemyCodexScreen from '../../components/EnemyCodexScreen';
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
-type Tab = 'play' | 'ships' | 'leaderboard';
+type Tab = 'play' | 'ships' | 'enemies' | 'leaderboard';
 
 const HEADER_H = 52;
 
 const TAB_TITLES: Record<Tab, string> = {
   play: 'ASTEROIDS',
   ships: 'SELECT SHIP',
+  enemies: 'ENEMY CODEX',
   leaderboard: 'LEADERBOARD',
 };
 
@@ -50,6 +52,7 @@ export default function AsteroidsPage() {
       <View style={s.content}>
         {tab === 'play'        && <AsteroidsGame />}
         {tab === 'ships'       && <ShipSelectScreen />}
+        {tab === 'enemies'     && <EnemyCodexScreen />}
         {tab === 'leaderboard' && <LeaderboardScreen />}
       </View>
 
@@ -76,6 +79,17 @@ export default function AsteroidsPage() {
               />
               <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'ships' && s.tabActive]}>
                 SHIPS
+              </Text>
+            </Pressable>
+
+            <Pressable style={s.tab} onPress={() => setTab('enemies')}>
+              <Ionicons
+                name={tab === 'enemies' ? 'skull' : 'skull-outline'}
+                size={22}
+                color={tab === 'enemies' ? '#4FC3F7' : '#777'}
+              />
+              <Text style={[s.tabLabel, { fontFamily: MONO }, tab === 'enemies' && s.tabActive]}>
+                ENEMIES
               </Text>
             </Pressable>
 

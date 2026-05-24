@@ -15,6 +15,7 @@ import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
+import { useEnemyCodexStore } from '../store/enemyCodexStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import ArcadeCoin from './ArcadeCoin';
@@ -289,6 +290,7 @@ export default function AsteroidsGame() {
     loadRuns();
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
+    useEnemyCodexStore.getState().load();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -639,6 +641,7 @@ export default function AsteroidsGame() {
             if (e.hp <= 0) {
               enemyDead.add(e.id);
               g.score += ENEMY_SCORE;
+              useEnemyCodexStore.getState().markKilled(e.designId);
               for (let k = 0; k < 22; k++) {
                 const dDir = rand(0, Math.PI * 2);
                 const dSpd = rand(1, 4.5);
@@ -719,7 +722,9 @@ export default function AsteroidsGame() {
         g.asteroids = mkLevel(g.level, W, H, g.sx, g.sy);
         const nEnemies = enemyCountForLevel(g.level);
         for (let i = 0; i < nEnemies; i++) {
-          g.enemies.push(mkEnemy(W, H, g.level, g.sx, g.sy));
+          const ne = mkEnemy(W, H, g.level, g.sx, g.sy);
+          g.enemies.push(ne);
+          useEnemyCodexStore.getState().markEncountered(ne.designId);
         }
       }
       // Demo: keep the field populated but never spawn saucers (clean visual).
