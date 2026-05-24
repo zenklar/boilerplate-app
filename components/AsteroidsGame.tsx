@@ -892,6 +892,9 @@ export default function AsteroidsGame() {
       gsRef.current.enemies = [];
       gsRef.current.enemyBullets = [];
     }
+    // Clear any control state left over from the AI (otherwise fire=true
+    // from the last AI tick will make the ship auto-shoot on game start).
+    ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
