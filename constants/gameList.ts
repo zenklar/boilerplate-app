@@ -22,4 +22,14 @@ export const GAME_LIST: GameEntry[] = [
     accentColor: '#4FC3F7',
     image: require('../assets/games/asteroids.png'),
   },
+  {
+    id: 'tetris',
+    title: 'Tetris',
+    year: '1984',
+    genre: 'Puzzle',
+    available: true,
+    route: '/game/tetris',
+    accentColor: '#4DD8FF',
+    image: require('../assets/games/tetris.png'),
+  },
 ];
