@@ -8,6 +8,7 @@ import {
   Platform,
   PanResponder,
   Animated,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useGameUIStore } from '../store/gameStore';
@@ -17,6 +18,7 @@ import { useSubscriptionStore } from '../store/subscriptionStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import ArcadeCoin from './ArcadeCoin';
+import ENEMY_IMAGES, { ENEMY_DESIGN_IDS } from '../constants/enemyImages';
 import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed, playEnemyShoot } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -50,7 +52,8 @@ const SPEEDS: Record<string, [number, number]> = {
 const SCORE_MAP: Record<string, number> = { large: 20, medium: 50, small: 100 };
 
 /* ── Enemy saucers ─── classic Asteroids UFO ── */
-const ENEMY_RADIUS = 22;
+const ENEMY_RADIUS = 26;
+const ENEMY_SPRITE = ENEMY_RADIUS * 2.1;
 const ENEMY_MAX_HP = 3;
 const ENEMY_SCORE = 250;
 const ENEMY_BULLET_SPEED = 4.6;
@@ -84,6 +87,8 @@ interface Asteroid {
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Enemy {
   id: number;
+  /** Which sprite from constants/enemyImages.ts to render. */
+  designId: number;
   x: number; y: number; vx: number; vy: number;
   hp: number;
   fireCD: number;
@@ -172,8 +177,10 @@ function mkEnemy(W: number, H: number, lvl: number, avoidX: number, avoidY: numb
   const safeY = Math.abs(y - avoidY) < 80 ? y + (y < avoidY ? -120 : 120) : y;
   const baseSpd = 1.2 + Math.min(1.4, (lvl - ENEMY_FIRST_LEVEL) * 0.12);
   const vx = (fromLeft ? 1 : -1) * baseSpd;
+  const designId = ENEMY_DESIGN_IDS[Math.floor(Math.random() * ENEMY_DESIGN_IDS.length)];
   return {
-    id: uid(), x, y: Math.max(ENEMY_RADIUS, Math.min(H - ENEMY_RADIUS, safeY)),
+    id: uid(), designId,
+    x, y: Math.max(ENEMY_RADIUS, Math.min(H - ENEMY_RADIUS, safeY)),
     vx, vy: 0, hp: ENEMY_MAX_HP,
     fireCD: 60 + Math.floor(rand(0, 40)),
     driftCD: 40 + Math.floor(rand(0, 40)),
@@ -950,64 +957,36 @@ export default function AsteroidsGame() {
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
         ))}
 
-        {/* Enemy saucers — classic Asteroids UFO outline + HP bar */}
+        {/* Enemy saucers — sprite + 3-segment HP bar */}
         {g?.phase === 'playing' && g.enemies.map((e) => {
-          const d = ENEMY_RADIUS * 2;
-          const segW = (d - 8) / ENEMY_MAX_HP - 2;
-          if (Platform.OS === 'web') {
-            const webStyle: any = {
-              position: 'absolute',
-              left: e.x - ENEMY_RADIUS,
-              top: e.y - ENEMY_RADIUS,
-              overflow: 'visible',
-            };
-            // Saucer: two horizontal trapezoids + a dome on top.
-            const cx = ENEMY_RADIUS, cy = ENEMY_RADIUS;
-            const wideY = cy + 2;
-            const bodyPts = `${cx - 18},${wideY} ${cx - 10},${wideY + 6} ${cx + 10},${wideY + 6} ${cx + 18},${wideY} ${cx + 10},${wideY - 5} ${cx - 10},${wideY - 5}`;
-            const domePts = `${cx - 9},${wideY - 5} ${cx - 5},${wideY - 12} ${cx + 5},${wideY - 12} ${cx + 9},${wideY - 5}`;
-            return (
-              <View key={e.id} style={{ position: 'absolute', left: e.x - ENEMY_RADIUS, top: e.y - ENEMY_RADIUS, width: d, height: d, overflow: 'visible' }}>
-                {/* @ts-ignore — SVG via React DOM */}
-                <svg width={d} height={d} style={{ position: 'absolute', overflow: 'visible' }}>
-                  {/* @ts-ignore */}
-                  <polygon points={bodyPts} fill="#222" stroke="#FFF" strokeWidth="1.8" />
-                  {/* @ts-ignore */}
-                  <polygon points={domePts} fill="#222" stroke="#FFF" strokeWidth="1.8" />
-                  {/* @ts-ignore */}
-                  <circle cx={cx - 6} cy={wideY + 1} r="1.6" fill="#FFF" />
-                  {/* @ts-ignore */}
-                  <circle cx={cx} cy={wideY + 1} r="1.6" fill="#FFF" />
-                  {/* @ts-ignore */}
-                  <circle cx={cx + 6} cy={wideY + 1} r="1.6" fill="#FFF" />
-                </svg>
-                {/* Health bar */}
-                <View style={{ position: 'absolute', left: 4, top: -10, flexDirection: 'row', gap: 2 }}>
-                  {Array.from({ length: ENEMY_MAX_HP }).map((_, i) => (
-                    <View key={i} style={{
-                      width: segW, height: 4,
-                      backgroundColor: i < e.hp ? '#FF3030' : '#3A0000',
-                      borderWidth: 1, borderColor: '#000',
-                    }} />
-                  ))}
-                </View>
-              </View>
-            );
-          }
-          // Native fallback — simple ellipse-like view
+          const barW = ENEMY_SPRITE * 0.8;
+          const segW = (barW - (ENEMY_MAX_HP - 1) * 2) / ENEMY_MAX_HP;
+          const src = ENEMY_IMAGES[e.designId];
           return (
-            <View key={e.id} style={{
-              position: 'absolute',
-              left: e.x - ENEMY_RADIUS, top: e.y - ENEMY_RADIUS,
-              width: d, height: d, alignItems: 'center', justifyContent: 'center',
-            }}>
+            <View
+              key={e.id}
+              style={{
+                position: 'absolute',
+                left: e.x - ENEMY_SPRITE / 2,
+                top: e.y - ENEMY_SPRITE / 2,
+                width: ENEMY_SPRITE,
+                height: ENEMY_SPRITE,
+              }}
+              pointerEvents="none"
+            >
+              {src && (
+                <Image
+                  source={src}
+                  style={{ width: ENEMY_SPRITE, height: ENEMY_SPRITE }}
+                  resizeMode="contain"
+                />
+              )}
+              {/* Health bar */}
               <View style={{
-                width: d, height: d * 0.5,
-                borderRadius: d * 0.5,
-                borderWidth: 2, borderColor: '#FFF',
-                backgroundColor: '#222',
-              }} />
-              <View style={{ position: 'absolute', left: 4, top: -10, flexDirection: 'row', gap: 2 }}>
+                position: 'absolute',
+                left: (ENEMY_SPRITE - barW) / 2, top: -10,
+                flexDirection: 'row', gap: 2,
+              }}>
                 {Array.from({ length: ENEMY_MAX_HP }).map((_, i) => (
                   <View key={i} style={{
                     width: segW, height: 4,
