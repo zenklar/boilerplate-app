@@ -25,7 +25,10 @@ import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdow
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const TICK_MS = 16;
 const SHIP_SIZE = 44;
-const BULLET_SPEED = 8;
+const ENEMY_BULLET_SPEED_BASE = 5.0;
+const BULLET_SPEED = ENEMY_BULLET_SPEED_BASE * 1.1;
+const BULLET_LEN = 14;
+const BULLET_W = 3;
 const BULLET_LIFETIME = 62;
 const THRUST_PWR = 0.13;
 const FRICTION = 0.988;
@@ -57,7 +60,7 @@ const ENEMY_RADIUS = 26;
 const ENEMY_SPRITE = ENEMY_RADIUS * 2.1;
 const ENEMY_MAX_HP = 3;
 const ENEMY_SCORE = 250;
-const ENEMY_BULLET_SPEED = 4.6;
+const ENEMY_BULLET_SPEED = ENEMY_BULLET_SPEED_BASE;
 const ENEMY_BULLET_LIFETIME = 110;
 /** First level at which a saucer can appear. Below this it's pure asteroids. */
 const ENEMY_FIRST_LEVEL = 2;
@@ -1017,10 +1020,19 @@ export default function AsteroidsGame() {
           );
         })}
 
-        {/* Bullets — during active play or demo */}
-        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => (
-          <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
-        ))}
+        {/* Bullets — during active play or demo (green laser bolts) */}
+        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => {
+          const angle = (Math.atan2(b.vy, b.vx) * 180) / Math.PI;
+          return (
+            <View
+              key={i}
+              style={[
+                s.bullet,
+                { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${angle}deg` }] },
+              ]}
+            />
+          );
+        })}
 
         {/* Enemy saucers — sprite (rotated to face player) + HP bar + shield flash */}
         {g?.phase === 'playing' && g.enemies.map((e) => {
@@ -1047,8 +1059,8 @@ export default function AsteroidsGame() {
                   left: ENEMY_SPRITE / 2 - shieldR,
                   top: ENEMY_SPRITE / 2 - shieldR,
                   width: shieldR * 2, height: shieldR * 2, borderRadius: shieldR,
-                  borderWidth: 2, borderColor: '#7FE3FF',
-                  backgroundColor: 'rgba(127,227,255,0.18)',
+                  borderWidth: 2, borderColor: '#FF6A1F',
+                  backgroundColor: 'rgba(255,106,31,0.22)',
                   opacity: e.shieldFlash / 12,
                 }} />
               )}
@@ -1082,10 +1094,19 @@ export default function AsteroidsGame() {
           );
         })}
 
-        {/* Enemy bullets — red */}
-        {g?.phase === 'playing' && g.enemyBullets.map((b, i) => (
-          <View key={`eb${i}`} style={[s.enemyBullet, { left: b.x - 3, top: b.y - 3 }]} />
-        ))}
+        {/* Enemy bullets — red laser bolts */}
+        {g?.phase === 'playing' && g.enemyBullets.map((b, i) => {
+          const angle = (Math.atan2(b.vy, b.vx) * 180) / Math.PI;
+          return (
+            <View
+              key={`eb${i}`}
+              style={[
+                s.enemyBullet,
+                { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${angle}deg` }] },
+              ]}
+            />
+          );
+        })}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
         {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p) => {
@@ -1143,7 +1164,7 @@ export default function AsteroidsGame() {
             {isPlaying && (
               <View style={s.livesRow}>
                 {Array.from({ length: Math.max(0, g.lives) }).map((_, i) => (
-                  <Text key={i} style={s.lifeIcon}>▲</Text>
+                  <Text key={i} style={s.lifeIcon}>♥</Text>
                 ))}
               </View>
             )}
@@ -1298,12 +1319,17 @@ const s = StyleSheet.create({
   canvas: { flex: 1, overflow: 'hidden' },
 
   bullet: {
-    position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
+    position: 'absolute',
+    width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
+    backgroundColor: '#39FF6A',
+    shadowColor: '#39FF6A', shadowOpacity: 1, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   enemyBullet: {
-    position: 'absolute', width: 6, height: 6, borderRadius: 3,
+    position: 'absolute',
+    width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#FF3030',
-    shadowColor: '#FF0000', shadowOpacity: 0.9, shadowRadius: 4,
+    shadowColor: '#FF0000', shadowOpacity: 1, shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
 
@@ -1317,7 +1343,10 @@ const s = StyleSheet.create({
     position: 'absolute', top: 44, left: 14,
     flexDirection: 'row', gap: 5,
   },
-  lifeIcon: { color: '#FFF', fontSize: 13 },
+  lifeIcon: {
+    color: '#FF2A3C', fontSize: 18,
+    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3,
+  },
   levelBadge: {
     position: 'absolute',
     bottom: CTRL_H + 10,
