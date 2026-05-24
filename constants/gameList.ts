@@ -42,4 +42,14 @@ export const GAME_LIST: GameEntry[] = [
     accentColor: '#4ED31F',
     image: require('../assets/games/snake.png'),
   },
+  {
+    id: 'pong',
+    title: 'Pong',
+    year: '1972',
+    genre: 'Paddle',
+    available: true,
+    route: '/game/pong',
+    accentColor: '#FFFFFF',
+    image: require('../assets/games/placeholder.png'),
+  },
 ];
