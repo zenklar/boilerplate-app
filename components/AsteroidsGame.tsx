@@ -16,6 +16,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
+import ArcadeCoin from './ArcadeCoin';
 import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -201,6 +202,7 @@ export default function AsteroidsGame() {
   const ctrl = useRef({ left: false, right: false, thrust: false, fire: false, fireCD: 0 });
   const frame = useRef(0);
   const pendingStart = useRef(false);
+  const pendingFlyInTicks = useRef<number | undefined>(undefined);
   // Web mouse aim
   const rootRef = useRef<View>(null);
   const canvasOrigin = useRef({ x: 0, y: 0 });
@@ -516,17 +518,23 @@ export default function AsteroidsGame() {
     return () => clearInterval(id);
   }, []); // single interval, always reads current refs
 
-  /* ── Init or restart game with given dimensions ── */
-  const initNewGame = (W: number, H: number) => {
+  /* ── Init or restart game with given dimensions ──
+   * If flyInTicks is provided, the ship starts at the bottom of the visible
+   * area and travels to center over that many game ticks (used so the fly-in
+   * lines up with the 3-2-1-GO countdown). Otherwise it uses the default
+   * fast fly-in from below the screen. */
+  const initNewGame = (W: number, H: number, flyInTicks?: number) => {
     setNewHS(false);
     // Start thrust sound for intro fly-in
     if (Platform.OS === 'web' && !thrustSoundRef.current) {
       thrustSoundRef.current = playThrustStart();
     }
+    const startSy = flyInTicks ? H - SHIP_SIZE * 1.2 : H + SHIP_SIZE * 2;
+    const svy = flyInTicks ? -((startSy - H / 2) / flyInTicks) : -5;
     gsRef.current = {
       phase: 'intro',
-      sx: W / 2, sy: H + SHIP_SIZE * 2,  // starts below visible area
-      svx: 0, svy: -5,                    // flies upward
+      sx: W / 2, sy: startSy,
+      svx: 0, svy,
       sAngle: 0, sInv: 0,
       bullets: [], particles: [], asteroids: [],
       score: 0, lives: 3, level: 1,
@@ -536,15 +544,16 @@ export default function AsteroidsGame() {
   };
 
   /* ── Start game ── */
-  const handleStartGame = () => {
+  const handleStartGame = (flyInTicks?: number) => {
     const alreadyFullscreen = useGameUIStore.getState().isGamePlaying;
     if (alreadyFullscreen) {
       // Layout unchanged (play again from game-over): use current dims directly
       const { w: W, h: H } = dimRef.current;
-      if (W > 0 && H > 0) initNewGame(W, H);
+      if (W > 0 && H > 0) initNewGame(W, H, flyInTicks);
     } else {
       // Idle → playing: hiding header/nav changes layout, wait for onLayout
       pendingStart.current = true;
+      pendingFlyInTicks.current = flyInTicks;
       setIsGamePlaying(true);
     }
   };
@@ -597,10 +606,21 @@ export default function AsteroidsGame() {
       } else if (n === 1) {
         setTimeout(() => runCountdown(0), 80); // "GO!"
       } else {
-        // Done — start the actual game
+        // Done — clear overlay. The intro fly-in started at countdown begin and
+        // should be arriving at center now; if for any reason it hasn't, snap.
         setTimeout(() => {
           setInsertPhase(null);
-          handleStartGame();
+          const g = gsRef.current;
+          if (g && g.phase === 'intro') {
+            const { w: W, h: H } = dimRef.current;
+            g.sy = H / 2; g.svx = 0; g.svy = 0; g.sInv = 0;
+            g.phase = 'playing';
+            g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
+            g.startTime = Date.now();
+            if (Platform.OS === 'web' && thrustSoundRef.current) {
+              thrustSoundRef.current.stop(); thrustSoundRef.current = null;
+            }
+          }
         }, 120);
       }
     });
@@ -625,6 +645,10 @@ export default function AsteroidsGame() {
         Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: true }),
       ]).start(() => {
         setInsertPhase('countdown');
+        // Start the ship fly-in NOW so it arrives at center as "GO" fires.
+        // Countdown spans ~2.7s ≈ 170 game ticks (16ms each); use 165 to give
+        // a small buffer so the ship lands just before the overlay clears.
+        handleStartGame(165);
         runCountdown(3);
       });
     });
@@ -663,7 +687,9 @@ export default function AsteroidsGame() {
 
     if (pendingStart.current && width > 0 && height > 0) {
       pendingStart.current = false;
-      initNewGame(width, gameH);
+      const ft = pendingFlyInTicks.current;
+      pendingFlyInTicks.current = undefined;
+      initNewGame(width, gameH, ft);
     } else if (!gsRef.current && width > 0 && height > 0) {
       const sx = width / 2, sy = gameH / 2;
       gsRef.current = {
@@ -880,10 +906,7 @@ export default function AsteroidsGame() {
                 },
               ]}
             >
-              <View style={s.fallingCoinInner}>
-                <Text style={s.fallingCoinLetter}>C</Text>
-              </View>
-              <View style={s.fallingCoinRing} />
+              <ArcadeCoin size={56} />
             </Animated.View>
           </View>
         )}
