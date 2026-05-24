@@ -18,16 +18,20 @@ const TICK_MS = 16;
 const CTRL_H = 0; // touch drag controls live inside the frame
 
 const FRAME_RATIO = 0.62;          // w / h — vertical playfield
-const PADDLE_W_FRAC = 0.22;         // paddle width as fraction of frame width
-const PADDLE_H = 10;
-const BALL_SIZE = 12;
-const PADDLE_MARGIN = 26;          // distance from top/bottom edge to paddle
-const BASE_SPEED = 4.0;
-const SPEED_GROWTH = 0.16;         // ball speeds up each paddle hit
-const MAX_SPEED = 9.0;
-const CPU_TRACK = 0.055;           // how aggressively CPU follows the ball
-const CPU_DEMO_TRACK = 0.10;       // demo opponent is perfect-ish
+const PADDLE_W_FRAC = 0.16;        // paddle width as fraction of frame width
+const PADDLE_H = 8;
+const BALL_SIZE = 11;
+const PADDLE_MARGIN = 22;          // distance from top/bottom edge to paddle
+const BASE_SPEED = 6.0;
+const SPEED_GROWTH = 1.05;         // ball speeds up 5% per paddle hit
+const MAX_SPEED = 14.0;
+const CPU_TRACK = 0.075;           // how aggressively CPU follows the ball
+const CPU_DEMO_TRACK = 0.11;       // demo opponent is perfect-ish
 const WIN_SCORE = 7;
+// Demo/idle layout: reserve space top + bottom so the play frame matches the
+// preview size used by other games (the frame must NOT fill the whole area).
+const DEMO_RESERVE_TOP = 150;
+const DEMO_RESERVE_BOTTOM = 130;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
@@ -195,7 +199,7 @@ export default function PongGame() {
           if (Math.abs(g.ballX - g.playerX) <= halfP + halfB) {
             // Reflect, with angle based on hit position
             const hit = (g.ballX - g.playerX) / halfP;     // -1..1
-            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) + SPEED_GROWTH);
+            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * SPEED_GROWTH);
             const angle = hit * (Math.PI / 3);             // up to ±60°
             g.ballVX = Math.sin(angle) * speed;
             g.ballVY = -Math.cos(angle) * speed;
@@ -211,7 +215,7 @@ export default function PongGame() {
         if (g.ballVY < 0 && g.ballY - halfB <= cpuY && g.ballY - halfB >= cpuY - PADDLE_H - Math.abs(g.ballVY)) {
           if (Math.abs(g.ballX - g.cpuX) <= halfP + halfB) {
             const hit = (g.ballX - g.cpuX) / halfP;
-            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) + SPEED_GROWTH);
+            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * SPEED_GROWTH);
             const angle = hit * (Math.PI / 3);
             g.ballVX = Math.sin(angle) * speed;
             g.ballVY = Math.cos(angle) * speed;
@@ -344,10 +348,15 @@ export default function PongGame() {
     setArea({ w: width, h: height });
   };
 
-  // Frame sized to fit, keeping a tall portrait aspect
+  const isDemoLayout = phase === 'idle' || phase === 'demo';
+
+  // Frame sized to fit, keeping a tall portrait aspect. In demo/idle we
+  // reserve space top + bottom for the title and INSERT COIN so the play
+  // frame is the same size you'd see across other arcade games.
   const playableH = area.h - CTRL_H;
+  const reserved  = isDemoLayout ? (DEMO_RESERVE_TOP + DEMO_RESERVE_BOTTOM) : 16;
   const maxW = area.w - 16;
-  const maxH = playableH - 16;
+  const maxH = playableH - reserved;
   let frameW = maxW;
   let frameH = frameW / FRAME_RATIO;
   if (frameH > maxH) { frameH = maxH; frameW = frameH * FRAME_RATIO; }
@@ -356,7 +365,6 @@ export default function PongGame() {
   frameRef.current = { w: frameW, h: frameH };
 
   const g = gsRef.current;
-  const isDemoLayout = phase === 'idle' || phase === 'demo';
   const showField = !!(g && (phase === 'playing' || phase === 'demo' || phase === 'gameover'));
   const paddleW = Math.max(40, frameW * PADDLE_W_FRAC);
 
