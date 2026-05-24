@@ -29,7 +29,7 @@ const ENEMY_BULLET_SPEED_BASE = 5.0;
 const BULLET_SPEED = ENEMY_BULLET_SPEED_BASE * 1.1;
 const BULLET_LEN = 14;
 const BULLET_W = 3;
-const BULLET_LIFETIME = 62;
+const BULLET_LIFETIME = 95;
 const THRUST_PWR = 0.13;
 const FRICTION = 0.988;
 const MAX_SPD = 7;
@@ -1321,8 +1321,8 @@ const s = StyleSheet.create({
   bullet: {
     position: 'absolute',
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
-    backgroundColor: '#39FF6A',
-    shadowColor: '#39FF6A', shadowOpacity: 1, shadowRadius: 6,
+    backgroundColor: '#7FE3FF',
+    shadowColor: '#7FE3FF', shadowOpacity: 1, shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
   enemyBullet: {
