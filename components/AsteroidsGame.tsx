@@ -17,7 +17,7 @@ import { useSubscriptionStore } from '../store/subscriptionStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import ArcadeCoin from './ArcadeCoin';
-import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed } from '../utils/sounds';
+import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed, playEnemyShoot } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const TICK_MS = 16;
@@ -49,6 +49,28 @@ const SPEEDS: Record<string, [number, number]> = {
 };
 const SCORE_MAP: Record<string, number> = { large: 20, medium: 50, small: 100 };
 
+/* ── Enemy saucers ─── classic Asteroids UFO ── */
+const ENEMY_RADIUS = 22;
+const ENEMY_MAX_HP = 3;
+const ENEMY_SCORE = 250;
+const ENEMY_BULLET_SPEED = 4.6;
+const ENEMY_BULLET_LIFETIME = 110;
+/** First level at which a saucer can appear. Below this it's pure asteroids. */
+const ENEMY_FIRST_LEVEL = 4;
+/** How many saucers spawn for a given level. */
+const enemyCountForLevel = (lvl: number): number => {
+  if (lvl < ENEMY_FIRST_LEVEL) return 0;
+  if (lvl < ENEMY_FIRST_LEVEL + 3) return 1;
+  if (lvl < ENEMY_FIRST_LEVEL + 6) return 2;
+  return Math.min(4, 2 + Math.floor((lvl - ENEMY_FIRST_LEVEL - 6) / 2));
+};
+/** Fire cooldown (in ticks) — shorter at higher levels but never brutal. */
+const enemyFireCDForLevel = (lvl: number): number =>
+  Math.max(70, 150 - (lvl - ENEMY_FIRST_LEVEL) * 8);
+/** How accurately the saucer aims (radians of random spread). Higher = sloppier. */
+const enemyAimSpreadForLevel = (lvl: number): number =>
+  Math.max(0.08, 0.35 - (lvl - ENEMY_FIRST_LEVEL) * 0.025);
+
 type Size = 'large' | 'medium' | 'small';
 type Phase = 'idle' | 'demo' | 'intro' | 'playing' | 'gameover';
 
@@ -60,6 +82,15 @@ interface Asteroid {
   verts: number[]; // per-vertex radius offsets, evenly spaced angles
 }
 interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
+interface Enemy {
+  id: number;
+  x: number; y: number; vx: number; vy: number;
+  hp: number;
+  fireCD: number;
+  /** Ticks until next random direction change. */
+  driftCD: number;
+}
+interface EnemyBullet { x: number; y: number; vx: number; vy: number; life: number; }
 interface Particle {
   id: number; x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; size: number;
@@ -71,6 +102,8 @@ interface GS {
   sAngle: number; sInv: number;
   bullets: Bullet[];
   asteroids: Asteroid[];
+  enemies: Enemy[];
+  enemyBullets: EnemyBullet[];
   particles: Particle[];
   score: number; lives: number; level: number;
   bulletsShot: number;
@@ -125,8 +158,26 @@ function mkAsteroid(
 }
 
 function mkLevel(lvl: number, W: number, H: number, sx: number, sy: number): Asteroid[] {
-  return Array.from({ length: Math.min(3 + lvl, 14) }, () =>
+  // Raised cap so higher levels keep ramping the asteroid count.
+  return Array.from({ length: Math.min(3 + lvl, 20) }, () =>
     mkAsteroid(W, H, 'large', sx, sy));
+}
+
+function mkEnemy(W: number, H: number, lvl: number, avoidX: number, avoidY: number): Enemy {
+  // Spawn off one of the side edges so the player has time to see it arrive.
+  const fromLeft = Math.random() < 0.5;
+  const x = fromLeft ? -ENEMY_RADIUS : W + ENEMY_RADIUS;
+  const y = rand(H * 0.15, H * 0.85);
+  // Don't crowd the player at the moment of spawn.
+  const safeY = Math.abs(y - avoidY) < 80 ? y + (y < avoidY ? -120 : 120) : y;
+  const baseSpd = 1.2 + Math.min(1.4, (lvl - ENEMY_FIRST_LEVEL) * 0.12);
+  const vx = (fromLeft ? 1 : -1) * baseSpd;
+  return {
+    id: uid(), x, y: Math.max(ENEMY_RADIUS, Math.min(H - ENEMY_RADIUS, safeY)),
+    vx, vy: 0, hp: ENEMY_MAX_HP,
+    fireCD: 60 + Math.floor(rand(0, 40)),
+    driftCD: 40 + Math.floor(rand(0, 40)),
+  };
 }
 
 /** Convert stored per-vertex radii to an SVG polygon points string.
@@ -466,50 +517,150 @@ export default function AsteroidsGame() {
       g.asteroids = [...g.asteroids.filter((a) => !deadA.has(a.id)), ...born];
       g.bullets = g.bullets.filter((_, i) => !deadB.has(i));
 
+      /* Enemy saucers — drift, shoot at player */
+      for (const e of g.enemies) {
+        e.driftCD--;
+        if (e.driftCD <= 0) {
+          const baseSpd = 1.2 + Math.min(1.4, (g.level - ENEMY_FIRST_LEVEL) * 0.12);
+          const dir = rand(0, Math.PI * 2);
+          e.vx = Math.cos(dir) * baseSpd;
+          e.vy = Math.sin(dir) * baseSpd * 0.55;
+          e.driftCD = 60 + Math.floor(rand(0, 80));
+        }
+        e.x = wrap(e.x + e.vx, W);
+        e.y += e.vy;
+        if (e.y < ENEMY_RADIUS) { e.y = ENEMY_RADIUS; e.vy = Math.abs(e.vy); }
+        if (e.y > H - ENEMY_RADIUS) { e.y = H - ENEMY_RADIUS; e.vy = -Math.abs(e.vy); }
+        e.fireCD--;
+        if (e.fireCD <= 0 && !isDemo) {
+          const baseAngle = Math.atan2(g.sy - e.y, g.sx - e.x);
+          const spread = enemyAimSpreadForLevel(g.level);
+          const angle = baseAngle + rand(-spread, spread);
+          g.enemyBullets.push({
+            x: e.x + Math.cos(angle) * (ENEMY_RADIUS + 4),
+            y: e.y + Math.sin(angle) * (ENEMY_RADIUS + 4),
+            vx: Math.cos(angle) * ENEMY_BULLET_SPEED,
+            vy: Math.sin(angle) * ENEMY_BULLET_SPEED,
+            life: ENEMY_BULLET_LIFETIME,
+          });
+          e.fireCD = enemyFireCDForLevel(g.level) + Math.floor(rand(0, 40));
+          if (Platform.OS === 'web') playEnemyShoot();
+        }
+      }
+
+      /* Enemy bullets — advance and cull */
+      g.enemyBullets = g.enemyBullets
+        .map((b) => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
+        .filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+
+      /* Player bullets → enemies (3 hp each) */
+      const enemyDead = new Set<number>();
+      const pbConsumed = new Set<number>();
+      for (const e of g.enemies) {
+        for (let bi = 0; bi < g.bullets.length; bi++) {
+          if (enemyDead.has(e.id) || pbConsumed.has(bi)) continue;
+          const b = g.bullets[bi];
+          if (d2(b.x, b.y, e.x, e.y) < (ENEMY_RADIUS + 4) ** 2) {
+            pbConsumed.add(bi);
+            e.hp--;
+            for (let k = 0; k < 6; k++) {
+              const dDir = rand(0, Math.PI * 2);
+              const dSpd = rand(0.8, 2.5);
+              g.particles.push({
+                id: uid(), x: e.x, y: e.y,
+                vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
+                life: 18, maxLife: 18, size: rand(1.5, 3), kind: 'debris',
+              });
+            }
+            if (e.hp <= 0) {
+              enemyDead.add(e.id);
+              g.score += ENEMY_SCORE;
+              for (let k = 0; k < 22; k++) {
+                const dDir = rand(0, Math.PI * 2);
+                const dSpd = rand(1, 4.5);
+                const dLife = Math.round(rand(26, 44));
+                g.particles.push({
+                  id: uid(), x: e.x, y: e.y,
+                  vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
+                  life: dLife, maxLife: dLife, size: rand(2.5, 6), kind: 'debris',
+                });
+              }
+              if (Platform.OS === 'web' && !isDemo) playExplosion('medium');
+            }
+          }
+        }
+      }
+      g.enemies = g.enemies.filter((e) => !enemyDead.has(e.id));
+      g.bullets = g.bullets.filter((_, i) => !pbConsumed.has(i));
+
+      /* Local death handler — used by both asteroid and enemy-bullet collisions */
+      const killPlayer = () => {
+        if (isDemo) {
+          g.sx = W / 2; g.sy = H / 2;
+          g.svx = 0; g.svy = 0;
+          g.sInv = 60;
+          return;
+        }
+        g.lives--;
+        if (g.lives <= 0) {
+          if (Platform.OS === 'web' && thrustSoundRef.current) {
+            thrustSoundRef.current.stop();
+            thrustSoundRef.current = null;
+          }
+          if (Platform.OS === 'web') playShipDestroyed();
+          g.phase = 'gameover';
+          setNewHS(g.score > useGameUIStore.getState().highScore);
+          updateHighScore(g.score);
+          useGameUIStore.getState().addRun({
+            id: String(Date.now()),
+            score: g.score,
+            bulletsShot: g.bulletsShot,
+            asteroidsDestroyed: g.asteroidsDestroyed,
+            durationMs: Date.now() - g.startTime,
+            date: Date.now(),
+          });
+        } else {
+          if (Platform.OS === 'web') playShipHit();
+          g.sx = W / 2; g.sy = H / 2;
+          g.svx = 0; g.svy = 0; g.sAngle = 0;
+          g.sInv = INVINCIBLE;
+        }
+      };
+
       /* Ship–asteroid collision */
       if (g.sInv === 0) {
         for (const a of g.asteroids) {
           if (d2(g.sx, g.sy, a.x, a.y) < (a.radius * 0.8 + 9) ** 2) {
-            if (isDemo) {
-              // Demo never ends — teleport to center with brief invincibility
-              g.sx = W / 2; g.sy = H / 2;
-              g.svx = 0; g.svy = 0;
-              g.sInv = 60;
-              break;
-            }
-            g.lives--;
-            if (g.lives <= 0) {
-              if (Platform.OS === 'web' && thrustSoundRef.current) {
-                thrustSoundRef.current.stop();
-                thrustSoundRef.current = null;
-              }
-              if (Platform.OS === 'web') playShipDestroyed();
-              g.phase = 'gameover';
-              setNewHS(g.score > useGameUIStore.getState().highScore);
-              updateHighScore(g.score);
-              useGameUIStore.getState().addRun({
-                id: String(Date.now()),
-                score: g.score,
-                bulletsShot: g.bulletsShot,
-                asteroidsDestroyed: g.asteroidsDestroyed,
-                durationMs: Date.now() - g.startTime,
-                date: Date.now(),
-              });
-            } else {
-              if (Platform.OS === 'web') playShipHit();
-              g.sx = W / 2; g.sy = H / 2;
-              g.svx = 0; g.svy = 0; g.sAngle = 0;
-              g.sInv = INVINCIBLE;
-            }
+            killPlayer();
             break;
           }
         }
       }
 
-      /* Level clear */
-      if (g.asteroids.length === 0) {
+      /* Ship–enemy bullet collision */
+      if (g.sInv === 0 && g.phase === 'playing') {
+        for (let i = 0; i < g.enemyBullets.length; i++) {
+          const b = g.enemyBullets[i];
+          if (d2(b.x, b.y, g.sx, g.sy) < 12 ** 2) {
+            g.enemyBullets.splice(i, 1);
+            killPlayer();
+            break;
+          }
+        }
+      }
+
+      /* Level clear — only when asteroids AND enemies are gone. */
+      if (!isDemo && g.asteroids.length === 0 && g.enemies.length === 0) {
         g.level++;
         g.asteroids = mkLevel(g.level, W, H, g.sx, g.sy);
+        const nEnemies = enemyCountForLevel(g.level);
+        for (let i = 0; i < nEnemies; i++) {
+          g.enemies.push(mkEnemy(W, H, g.level, g.sx, g.sy));
+        }
+      }
+      // Demo: keep the field populated but never spawn saucers (clean visual).
+      if (isDemo && g.asteroids.length === 0) {
+        g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
       }
 
       setTick((t) => t + 1);
@@ -536,7 +687,7 @@ export default function AsteroidsGame() {
       sx: W / 2, sy: startSy,
       svx: 0, svy,
       sAngle: 0, sInv: 0,
-      bullets: [], particles: [], asteroids: [],
+      bullets: [], particles: [], asteroids: [], enemies: [], enemyBullets: [],
       score: 0, lives: 3, level: 1,
       bulletsShot: 0, asteroidsDestroyed: 0, startTime: Date.now(),
     };
@@ -576,6 +727,8 @@ export default function AsteroidsGame() {
       gsRef.current.bullets = [];
       gsRef.current.particles = [];
       gsRef.current.asteroids = W > 0 && H > 0 ? mkLevel(1, W, H, sx, sy) : [];
+      gsRef.current.enemies = [];
+      gsRef.current.enemyBullets = [];
     }
     ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
     joyActive.current = false;
@@ -667,6 +820,8 @@ export default function AsteroidsGame() {
       gsRef.current.asteroids = [];
       gsRef.current.bullets = [];
       gsRef.current.particles = [];
+      gsRef.current.enemies = [];
+      gsRef.current.enemyBullets = [];
     }
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
@@ -696,6 +851,7 @@ export default function AsteroidsGame() {
         phase: 'demo',
         sx, sy, svx: 0, svy: 0, sAngle: 0, sInv: 0,
         bullets: [], particles: [], asteroids: mkLevel(1, width, gameH, sx, sy),
+        enemies: [], enemyBullets: [],
         score: 0, lives: 3, level: 1,
         bulletsShot: 0, asteroidsDestroyed: 0, startTime: 0,
       };
@@ -792,6 +948,81 @@ export default function AsteroidsGame() {
         {/* Bullets — during active play or demo */}
         {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => (
           <View key={i} style={[s.bullet, { left: b.x - 2.5, top: b.y - 2.5 }]} />
+        ))}
+
+        {/* Enemy saucers — classic Asteroids UFO outline + HP bar */}
+        {g?.phase === 'playing' && g.enemies.map((e) => {
+          const d = ENEMY_RADIUS * 2;
+          const segW = (d - 8) / ENEMY_MAX_HP - 2;
+          if (Platform.OS === 'web') {
+            const webStyle: any = {
+              position: 'absolute',
+              left: e.x - ENEMY_RADIUS,
+              top: e.y - ENEMY_RADIUS,
+              overflow: 'visible',
+            };
+            // Saucer: two horizontal trapezoids + a dome on top.
+            const cx = ENEMY_RADIUS, cy = ENEMY_RADIUS;
+            const wideY = cy + 2;
+            const bodyPts = `${cx - 18},${wideY} ${cx - 10},${wideY + 6} ${cx + 10},${wideY + 6} ${cx + 18},${wideY} ${cx + 10},${wideY - 5} ${cx - 10},${wideY - 5}`;
+            const domePts = `${cx - 9},${wideY - 5} ${cx - 5},${wideY - 12} ${cx + 5},${wideY - 12} ${cx + 9},${wideY - 5}`;
+            return (
+              <View key={e.id} style={{ position: 'absolute', left: e.x - ENEMY_RADIUS, top: e.y - ENEMY_RADIUS, width: d, height: d, overflow: 'visible' }}>
+                {/* @ts-ignore — SVG via React DOM */}
+                <svg width={d} height={d} style={{ position: 'absolute', overflow: 'visible' }}>
+                  {/* @ts-ignore */}
+                  <polygon points={bodyPts} fill="#222" stroke="#FFF" strokeWidth="1.8" />
+                  {/* @ts-ignore */}
+                  <polygon points={domePts} fill="#222" stroke="#FFF" strokeWidth="1.8" />
+                  {/* @ts-ignore */}
+                  <circle cx={cx - 6} cy={wideY + 1} r="1.6" fill="#FFF" />
+                  {/* @ts-ignore */}
+                  <circle cx={cx} cy={wideY + 1} r="1.6" fill="#FFF" />
+                  {/* @ts-ignore */}
+                  <circle cx={cx + 6} cy={wideY + 1} r="1.6" fill="#FFF" />
+                </svg>
+                {/* Health bar */}
+                <View style={{ position: 'absolute', left: 4, top: -10, flexDirection: 'row', gap: 2 }}>
+                  {Array.from({ length: ENEMY_MAX_HP }).map((_, i) => (
+                    <View key={i} style={{
+                      width: segW, height: 4,
+                      backgroundColor: i < e.hp ? '#FF3030' : '#3A0000',
+                      borderWidth: 1, borderColor: '#000',
+                    }} />
+                  ))}
+                </View>
+              </View>
+            );
+          }
+          // Native fallback — simple ellipse-like view
+          return (
+            <View key={e.id} style={{
+              position: 'absolute',
+              left: e.x - ENEMY_RADIUS, top: e.y - ENEMY_RADIUS,
+              width: d, height: d, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <View style={{
+                width: d, height: d * 0.5,
+                borderRadius: d * 0.5,
+                borderWidth: 2, borderColor: '#FFF',
+                backgroundColor: '#222',
+              }} />
+              <View style={{ position: 'absolute', left: 4, top: -10, flexDirection: 'row', gap: 2 }}>
+                {Array.from({ length: ENEMY_MAX_HP }).map((_, i) => (
+                  <View key={i} style={{
+                    width: segW, height: 4,
+                    backgroundColor: i < e.hp ? '#FF3030' : '#3A0000',
+                    borderWidth: 1, borderColor: '#000',
+                  }} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
+
+        {/* Enemy bullets — red */}
+        {g?.phase === 'playing' && g.enemyBullets.map((b, i) => (
+          <View key={`eb${i}`} style={[s.enemyBullet, { left: b.x - 3, top: b.y - 3 }]} />
         ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
@@ -1006,6 +1237,12 @@ const s = StyleSheet.create({
 
   bullet: {
     position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#FFF',
+  },
+  enemyBullet: {
+    position: 'absolute', width: 6, height: 6, borderRadius: 3,
+    backgroundColor: '#FF3030',
+    shadowColor: '#FF0000', shadowOpacity: 0.9, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
   },
 
   hud: {

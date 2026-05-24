@@ -41,6 +41,22 @@ export function playShoot(): void {
   osc.stop(a.currentTime + 0.11);
 }
 
+/** Lower, growlier triangle-wave shot used by enemies — easy to tell apart
+ *  from the player's bright square-wave laser. */
+export function playEnemyShoot(): void {
+  const a = ac(); if (!a) return;
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(220, a.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(60, a.currentTime + 0.18);
+  gain.gain.setValueAtTime(0.18, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.18);
+  osc.start(a.currentTime);
+  osc.stop(a.currentTime + 0.2);
+}
+
 /** Start a continuous filtered-noise thruster rumble. Call stop() to silence it. */
 export function playThrustStart(): { stop: () => void } {
   const a = ac();
