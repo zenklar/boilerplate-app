@@ -15,8 +15,11 @@ const PERKS = [
   'VIP badge in leaderboards',
 ];
 
-/* Floating sparkle particle for active state */
-function Sparkle({ delay, left, top, size }: { delay: number; left: number; top: number; size: number }) {
+/* Floating sparkle particle */
+function Sparkle({ delay, left, top, size, color = '#FFE066', icon = 'sparkles' }: {
+  delay: number; left: number; top: number; size: number;
+  color?: string; icon?: 'sparkles' | 'star';
+}) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
@@ -42,7 +45,7 @@ function Sparkle({ delay, left, top, size }: { delay: number; left: number; top:
         transform: [{ scale }, { translateY }],
       }}
     >
-      <Ionicons name="sparkles" size={size} color="#FFE066" />
+      <Ionicons name={icon} size={size} color={color} />
     </Animated.View>
   );
 }
@@ -122,10 +125,37 @@ function SubscriptionTile() {
         <LinearGradient
           colors={isSubscribed
             ? ['#3A2200', '#7A4A00', '#A8730B', '#7A4A00', '#3A2200']
-            : ['#080420', '#160840', '#0C0635', '#1A0A48', '#080420']}
+            : ['#1B0846', '#3A0F8A', '#5B189F', '#7A1FBF', '#2A0B68']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
+
+        {/* Sharp angular accents on inactive (purple) state */}
+        {!isSubscribed && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <View style={[st.angleShape, st.angleA]}>
+              <LinearGradient
+                colors={['rgba(217,70,239,0.45)', 'rgba(168,85,247,0.0)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+            <View style={[st.angleShape, st.angleB]}>
+              <LinearGradient
+                colors={['rgba(124,58,237,0.0)', 'rgba(236,72,153,0.4)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+            <View style={[st.angleShape, st.angleC]}>
+              <LinearGradient
+                colors={['rgba(192,132,252,0.35)', 'rgba(192,132,252,0.0)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Diagonal grid scanlines for arcade feel */}
         {isSubscribed && (
@@ -169,7 +199,7 @@ function SubscriptionTile() {
         )}
 
         {/* Floating sparkles */}
-        {isSubscribed && (
+        {isSubscribed ? (
           <>
             <Sparkle delay={0}    left={28}  top={18}  size={11} />
             <Sparkle delay={600}  left={210} top={36}  size={9}  />
@@ -177,6 +207,16 @@ function SubscriptionTile() {
             <Sparkle delay={400}  left={300} top={110} size={10} />
             <Sparkle delay={1500} left={60}  top={150} size={8}  />
             <Sparkle delay={900}  left={260} top={170} size={11} />
+          </>
+        ) : (
+          <>
+            <Sparkle delay={0}    left={200} top={20}  size={10} color="#F0A8FF" />
+            <Sparkle delay={700}  left={280} top={60}  size={8}  color="#E9D5FF" icon="star" />
+            <Sparkle delay={1300} left={170} top={92}  size={12} color="#F0A8FF" />
+            <Sparkle delay={500}  left={310} top={130} size={9}  color="#FBCFE8" icon="star" />
+            <Sparkle delay={1700} left={240} top={170} size={10} color="#F0A8FF" />
+            <Sparkle delay={1000} left={130} top={150} size={7}  color="#FBCFE8" icon="star" />
+            <Sparkle delay={300}  left={260} top={100} size={6}  color="#FFFFFF" icon="star" />
           </>
         )}
 
@@ -379,7 +419,7 @@ const st = StyleSheet.create({
   subCard: {
     borderRadius: 18, overflow: 'hidden',
     padding: 18,
-    borderWidth: 1, borderColor: 'rgba(160, 80, 255, 0.4)',
+    borderWidth: 1, borderColor: 'rgba(192, 132, 252, 0.55)',
   },
   subCardActive: {
     borderColor: 'rgba(255, 215, 0, 0.8)',
@@ -394,6 +434,28 @@ const st = StyleSheet.create({
     left: 0, right: 0,
     height: 1,
     backgroundColor: 'rgba(255, 230, 130, 0.07)',
+  },
+  angleShape: {
+    position: 'absolute',
+    overflow: 'hidden',
+  },
+  angleA: {
+    top: -40, left: -50,
+    width: 220, height: 220,
+    transform: [{ rotate: '25deg' }],
+    borderRadius: 8,
+  },
+  angleB: {
+    bottom: -60, right: -70,
+    width: 260, height: 180,
+    transform: [{ rotate: '-18deg' }],
+    borderRadius: 8,
+  },
+  angleC: {
+    top: 60, right: -40,
+    width: 180, height: 80,
+    transform: [{ rotate: '12deg' }],
+    borderRadius: 6,
   },
   shimmer: {
     position: 'absolute', top: 0, bottom: 0, width: 120,
