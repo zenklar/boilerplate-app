@@ -921,7 +921,7 @@ export default function AsteroidsGame() {
       const ft = pendingFlyInTicks.current;
       pendingFlyInTicks.current = undefined;
       initNewGame(width, gameH, ft);
-    } else if (!gsRef.current && width > 0 && height > 0) {
+    } else if (!gsRef.current && width > 0 && height > 0 && gameAreaSize.w > 0) {
       const sx = width / 2, sy = gameH / 2;
       gsRef.current = {
         phase: 'demo',
