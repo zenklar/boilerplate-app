@@ -851,12 +851,6 @@ export default function AsteroidsGame() {
                   {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
                 </Text>
               </Pressable>
-              <View style={s.coinHintRow}>
-                <View style={s.coinHintBadge}><Text style={s.coinHintBadgeLetter}>C</Text></View>
-                <Text style={[s.coinHint, { fontFamily: MONO }]}>
-                  {coins > 0 ? `${coins} COIN${coins !== 1 ? 'S' : ''} AVAILABLE` : 'NO COINS — VISIT SHOP'}
-                </Text>
-              </View>
               {Platform.OS === 'web' && (
                 <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
                   Mouse aim · LMB thrust · Space to fire
@@ -1006,7 +1000,10 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 10, left: 0, right: 0,
     color: '#666', fontSize: 11, textAlign: 'center',
   },
-  webIdleHint: { color: '#999', fontSize: 12, letterSpacing: 1 },
+  webIdleHint: {
+    color: '#CCC', fontSize: 12, letterSpacing: 1,
+    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
+  },
 
   // Title/idle overlay — transparent so the autoplay demo shows through.
   // Title pinned to the top, button + hints pinned to the bottom.
@@ -1024,20 +1021,27 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', gap: 18,
   },
 
-  titleText: { color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8 },
+  titleText: {
+    color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8,
+    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
+  },
   yearText: { color: '#888', fontSize: 14, letterSpacing: 2 },
-  hiLabel: { color: '#FFD700', fontSize: 14, letterSpacing: 1 },
+  hiLabel: {
+    color: '#FFD700', fontSize: 14, letterSpacing: 1,
+    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
+  },
   finalScore: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 6 },
   newHsText: { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },
 
   btnRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
   // Title screen button
   menuBtn: {
-    borderWidth: 1.5, borderColor: '#FFD700',
+    borderWidth: 1.5, borderColor: '#B8860B',
+    backgroundColor: '#FFD700',
     paddingHorizontal: 24, paddingVertical: 12,
   },
-  menuBtnNoCoins: { borderColor: '#555' },
-  menuBtnTxt: { color: '#FFD700', fontSize: 13, letterSpacing: 4 },
+  menuBtnNoCoins: { backgroundColor: '#555', borderColor: '#333' },
+  menuBtnTxt: { color: '#000', fontSize: 13, letterSpacing: 4, fontWeight: '800' },
   // Coin hint below INSERT COIN button
   coinHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -4 },
   coinHintBadge: {
