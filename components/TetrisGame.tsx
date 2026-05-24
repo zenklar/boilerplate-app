@@ -67,9 +67,18 @@ type GS = {
   startTime: number;
   topOut: boolean;
   particles: Particle[];
-  // Demo-only: AI target for the active piece
+  // Demo-only: AI target for the active piece, plus a tick countdown that
+  // throttles how often the AI moves/rotates so the preview is watchable.
   demoTarget: { x: number; rot: number } | null;
+  demoStepCD: number;
 };
+
+// How many ticks (16ms each) between AI actions in the title-screen demo.
+// Higher = slower preview. Bumped to ~7 frames/step + a longer pause after
+// each piece locks.
+const DEMO_STEP_INTERVAL = 7;
+const DEMO_LOCK_PAUSE = 30;
+const DEMO_GRAVITY = 16;
 
 let _nid = 1;
 const uid = () => _nid++;
@@ -324,22 +333,31 @@ export default function TetrisGame() {
       if (!g.active) { setTick((t) => t + 1); return; }
 
       // Demo AI: rotate toward target, slide toward target x, then drop.
+      // Throttled by demoStepCD so the preview is calm and readable.
       if (isDemo) {
-        if (!g.demoTarget) g.demoTarget = pickDemoTarget(g);
-        const t = g.demoTarget;
-        if (g.active.rot !== t.rot) {
-          tryRotate(1);
-        } else if (g.active.x < t.x) {
-          tryMove(1, 0);
-        } else if (g.active.x > t.x) {
-          tryMove(-1, 0);
+        if (g.demoStepCD > 0) {
+          g.demoStepCD--;
         } else {
-          // Aligned — drop straight to landing position and lock.
-          const dropY = ghostY(g.board, g.active);
-          g.active = { ...g.active, y: dropY };
-          lockPiece(true);
-          setTick((t) => t + 1);
-          return;
+          if (!g.demoTarget) g.demoTarget = pickDemoTarget(g);
+          const t = g.demoTarget;
+          if (g.active.rot !== t.rot) {
+            tryRotate(1);
+            g.demoStepCD = DEMO_STEP_INTERVAL;
+          } else if (g.active.x < t.x) {
+            tryMove(1, 0);
+            g.demoStepCD = DEMO_STEP_INTERVAL;
+          } else if (g.active.x > t.x) {
+            tryMove(-1, 0);
+            g.demoStepCD = DEMO_STEP_INTERVAL;
+          } else {
+            // Aligned — drop to landing, lock, then pause before next piece.
+            const dropY = ghostY(g.board, g.active);
+            g.active = { ...g.active, y: dropY };
+            lockPiece(true);
+            g.demoStepCD = DEMO_LOCK_PAUSE;
+            setTick((tt) => tt + 1);
+            return;
+          }
         }
       } else if (Platform.OS === 'web' && mouseTargetX.current !== null) {
         // Player steering: step the piece toward the mouse column. We use
@@ -353,8 +371,8 @@ export default function TetrisGame() {
         else if (centerCol > want) tryMove(-1, 0);
       }
 
-      const gravity = DROP_FRAMES_PER_LEVEL(g.level);
-      const effective = heldRef.current.down
+      const gravity = isDemo ? DEMO_GRAVITY : DROP_FRAMES_PER_LEVEL(g.level);
+      const effective = !isDemo && heldRef.current.down
         ? Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR))
         : gravity;
 
@@ -513,6 +531,7 @@ export default function TetrisGame() {
       topOut: false,
       particles: [],
       demoTarget: null,
+      demoStepCD: 0,
     };
     // Reset input state so any keys still held don't leak in
     heldRef.current = { down: false };
@@ -537,6 +556,7 @@ export default function TetrisGame() {
       topOut: false,
       particles: [],
       demoTarget: null,
+      demoStepCD: 0,
     };
     setPhase('demo');
   }
