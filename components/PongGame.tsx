@@ -15,7 +15,7 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
-const CTRL_H = 0; // touch drag controls live inside the frame
+const CTRL_H = Platform.OS === 'web' ? 0 : 90;   // mobile reserves BOOST button row
 
 const FRAME_RATIO = 0.62;          // w / h — vertical playfield
 const PADDLE_W_FRAC = 0.16;        // paddle width as fraction of frame width
@@ -24,10 +24,25 @@ const BALL_SIZE = 11;
 const PADDLE_MARGIN = 22;          // distance from top/bottom edge to paddle
 const BASE_SPEED = 6.0;
 const SPEED_GROWTH = 1.05;         // ball speeds up 5% per paddle hit
-const MAX_SPEED = 14.0;
+const MAX_SPEED = 18.0;
 const CPU_TRACK = 0.075;           // how aggressively CPU follows the ball
 const CPU_DEMO_TRACK = 0.11;       // demo opponent is perfect-ish
 const WIN_SCORE = 7;
+
+// Boost (smash) — extra 10% on top of normal hit growth
+const BOOST_MULT = 1.10;
+const BOOST_ACTIVE_TICKS   = 14;   // ~0.22s window
+const BOOST_COOLDOWN_TICKS = 80;   // ~1.3s
+const CPU_BOOST_CHANCE_PER_TICK = 0.06; // when ball is in striking range
+
+// Speed lights — perimeter-orbiting glow zones. Hitting one with the ball
+// adds 20% speed. Number of lights scales with the rally round.
+const LIGHT_LEN = 28;              // segment length along the perimeter (px)
+const LIGHT_THICKNESS = 5;
+const LIGHT_BASE_SPEED = 0.0030;   // perimeter fraction / tick
+const LIGHT_HIT_MULT = 1.20;
+const MAX_LIGHTS = 4;
+
 // Demo/idle layout: reserve space top + bottom so the play frame matches the
 // preview size used by other games (the frame must NOT fill the whole area).
 const DEMO_RESERVE_TOP = 150;
@@ -35,6 +50,8 @@ const DEMO_RESERVE_BOTTOM = 130;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
+
+type Light = { pos: number; dir: 1 | -1; speed: number };
 
 type GS = {
   ballX: number; ballY: number;
@@ -48,9 +65,67 @@ type GS = {
   startTime: number;
   serveCD: number;                  // tick countdown before ball moves after a serve
   serveDir: 1 | -1;                 // which way ball serves (+1 = toward cpu)
+  round: number;                    // increments each serve; drives light count
+  lights: Light[];
+  playerBoostActive: number;
+  playerBoostCD: number;
+  cpuBoostActive: number;
+  cpuBoostCD: number;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Map a perimeter position (0..1, clockwise from top-left) to a screen
+ *  point on the frame edge, plus the side it lies on. */
+function perimeterToXY(pos: number, W: number, H: number) {
+  const perim = 2 * (W + H);
+  let d = ((pos % 1) + 1) % 1 * perim;
+  if (d < W)         return { x: d, y: 0, side: 'top' as const };
+  d -= W;
+  if (d < H)         return { x: W, y: d, side: 'right' as const };
+  d -= H;
+  if (d < W)         return { x: W - d, y: H, side: 'bottom' as const };
+  d -= H;
+  return { x: 0, y: H - d, side: 'left' as const };
+}
+
+/** Did any light overlap the given hit point on the specified side? */
+function lightOnSideHit(
+  lights: Light[], side: 'top' | 'right' | 'bottom' | 'left',
+  hitPos: number, W: number, H: number,
+): boolean {
+  const halfLen = LIGHT_LEN / 2;
+  for (const l of lights) {
+    const xy = perimeterToXY(l.pos, W, H);
+    if (xy.side !== side) continue;
+    const sidePos = (side === 'top' || side === 'bottom') ? xy.x : xy.y;
+    if (Math.abs(sidePos - hitPos) < halfLen) return true;
+  }
+  return false;
+}
+
+/** Build the light arrangement for the given round.
+ *  Round 1 → 1 light. Round 3 → 2. Round 5 → 3. Round 7+ → 4. */
+function lightsForRound(round: number): Light[] {
+  const count = Math.min(MAX_LIGHTS, 1 + Math.floor((round - 1) / 2));
+  const out: Light[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push({
+      pos: Math.random(),
+      dir: Math.random() < 0.5 ? 1 : -1,
+      speed: LIGHT_BASE_SPEED * (0.75 + Math.random() * 0.9),
+    });
+  }
+  return out;
+}
+
+function applyLightBoost(g: GS) {
+  const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * LIGHT_HIT_MULT);
+  const cur = Math.hypot(g.ballVX, g.ballVY) || 1;
+  g.ballVX = (g.ballVX / cur) * speed;
+  g.ballVY = (g.ballVY / cur) * speed;
+}
+
 function serve(g: GS, frameW: number, frameH: number, dir: 1 | -1) {
   g.ballX = frameW / 2;
   g.ballY = frameH / 2;
@@ -60,6 +135,10 @@ function serve(g: GS, frameW: number, frameH: number, dir: 1 | -1) {
   g.serveCD = 36;                   // ~0.6s pause before play
   g.serveDir = dir;
   g.rally = 0;
+  g.round += 1;
+  g.lights = lightsForRound(g.round);
+  g.playerBoostActive = 0;
+  g.cpuBoostActive = 0;
 }
 
 function makeInitialState(frameW: number, frameH: number): GS {
@@ -72,6 +151,10 @@ function makeInitialState(frameW: number, frameH: number): GS {
     rally: 0, longestRally: 0,
     startTime: Date.now(),
     serveCD: 36, serveDir: -1,
+    round: 0,                       // serve() bumps to 1 below
+    lights: [],
+    playerBoostActive: 0, playerBoostCD: 0,
+    cpuBoostActive: 0,   cpuBoostCD: 0,
   };
   serve(g, frameW, frameH, -1);
   return g;
@@ -117,6 +200,14 @@ export default function PongGame() {
     }
   }, [phase, area.w, area.h]);
 
+  const triggerPlayerBoost = useCallback(() => {
+    const g = gsRef.current;
+    if (!g) return;
+    if (g.playerBoostCD > 0 || g.playerBoostActive > 0) return;
+    g.playerBoostActive = BOOST_ACTIVE_TICKS;
+    g.playerBoostCD = BOOST_COOLDOWN_TICKS;
+  }, []);
+
   // Web keyboard
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -124,13 +215,20 @@ export default function PongGame() {
       const k = e.key.toLowerCase();
       if (k === 'arrowleft' || k === 'a')  { keyRef.current.left = down;  e.preventDefault(); }
       else if (k === 'arrowright' || k === 'd') { keyRef.current.right = down; e.preventDefault(); }
-      else if (k === ' ' && down && phase === 'idle') { e.preventDefault(); handleInsertCoin(); }
+      else if (k === ' ' && down) {
+        e.preventDefault();
+        if (phase === 'idle' || phase === 'gameover') handleInsertCoin();
+        else if (phase === 'playing') triggerPlayerBoost();
+      }
+      else if ((k === 'arrowup' || k === 'w' || k === 'shift') && down && phase === 'playing') {
+        e.preventDefault(); triggerPlayerBoost();
+      }
     };
     const dn = handle(true); const up = handle(false);
     window.addEventListener('keydown', dn);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', dn); window.removeEventListener('keyup', up); };
-  }, [phase]);
+  }, [phase, triggerPlayerBoost]);
 
   // Touch drag (mobile + web) — set target x for the paddle
   const panResponder = useRef(
@@ -179,6 +277,27 @@ export default function PongGame() {
       g.cpuX += (cpuAim - g.cpuX) * trackRate;
       g.cpuX = Math.max(halfP, Math.min(frame.w - halfP, g.cpuX));
 
+      // ── Boost timers ──
+      if (g.playerBoostActive > 0) g.playerBoostActive -= 1;
+      if (g.playerBoostCD > 0)     g.playerBoostCD -= 1;
+      if (g.cpuBoostActive > 0)    g.cpuBoostActive -= 1;
+      if (g.cpuBoostCD > 0)        g.cpuBoostCD -= 1;
+
+      // CPU boost AI: trigger when ball is closing in on the CPU paddle
+      const cpuYAI = PADDLE_MARGIN + PADDLE_H;
+      const cpuReady = g.cpuBoostCD === 0 && g.cpuBoostActive === 0;
+      if (cpuReady && g.ballVY < 0 && (g.ballY - cpuYAI) < 70 && Math.abs(g.ballX - g.cpuX) < paddleW * 0.9) {
+        if (Math.random() < CPU_BOOST_CHANCE_PER_TICK) {
+          g.cpuBoostActive = BOOST_ACTIVE_TICKS;
+          g.cpuBoostCD = BOOST_COOLDOWN_TICKS;
+        }
+      }
+
+      // ── Speed lights orbit the frame ──
+      for (const l of g.lights) {
+        l.pos = (l.pos + l.speed * l.dir + 1) % 1;
+      }
+
       // ── Ball ──
       if (g.serveCD > 0) {
         g.serveCD -= 1;
@@ -186,20 +305,30 @@ export default function PongGame() {
         g.ballX += g.ballVX;
         g.ballY += g.ballVY;
 
-        // Side walls
+        // Side walls (and check if a light is camped on the hit point)
         if (g.ballX - halfB <= 0 && g.ballVX < 0) {
           g.ballX = halfB; g.ballVX *= -1;
+          if (lightOnSideHit(g.lights, 'left', g.ballY, frame.w, frame.h)) {
+            applyLightBoost(g);
+          }
         } else if (g.ballX + halfB >= frame.w && g.ballVX > 0) {
           g.ballX = frame.w - halfB; g.ballVX *= -1;
+          if (lightOnSideHit(g.lights, 'right', g.ballY, frame.w, frame.h)) {
+            applyLightBoost(g);
+          }
         }
 
         // Paddle collision — player (bottom)
         const playerY = frame.h - PADDLE_MARGIN;
         if (g.ballVY > 0 && g.ballY + halfB >= playerY && g.ballY + halfB <= playerY + PADDLE_H + Math.abs(g.ballVY)) {
           if (Math.abs(g.ballX - g.playerX) <= halfP + halfB) {
-            // Reflect, with angle based on hit position
             const hit = (g.ballX - g.playerX) / halfP;     // -1..1
-            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * SPEED_GROWTH);
+            let mult = SPEED_GROWTH;
+            if (g.playerBoostActive > 0) {
+              mult *= BOOST_MULT;
+              g.playerBoostActive = 0; // consumed
+            }
+            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * mult);
             const angle = hit * (Math.PI / 3);             // up to ±60°
             g.ballVX = Math.sin(angle) * speed;
             g.ballVY = -Math.cos(angle) * speed;
@@ -215,7 +344,12 @@ export default function PongGame() {
         if (g.ballVY < 0 && g.ballY - halfB <= cpuY && g.ballY - halfB >= cpuY - PADDLE_H - Math.abs(g.ballVY)) {
           if (Math.abs(g.ballX - g.cpuX) <= halfP + halfB) {
             const hit = (g.ballX - g.cpuX) / halfP;
-            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * SPEED_GROWTH);
+            let mult = SPEED_GROWTH;
+            if (g.cpuBoostActive > 0) {
+              mult *= BOOST_MULT;
+              g.cpuBoostActive = 0;
+            }
+            const speed = Math.min(MAX_SPEED, Math.hypot(g.ballVX, g.ballVY) * mult);
             const angle = hit * (Math.PI / 3);
             g.ballVX = Math.sin(angle) * speed;
             g.ballVY = Math.cos(angle) * speed;
@@ -384,6 +518,52 @@ export default function PongGame() {
     }
   }
 
+  // Speed lights — orbiting glow segments on the frame perimeter
+  const lightNodes: React.ReactNode[] = [];
+  if (showField && g) {
+    for (let li = 0; li < g.lights.length; li++) {
+      const l = g.lights[li];
+      const xy = perimeterToXY(l.pos, frameW, frameH);
+      const horizontal = xy.side === 'top' || xy.side === 'bottom';
+      const length = LIGHT_LEN;
+      const thick = LIGHT_THICKNESS;
+      const left = horizontal ? xy.x - length / 2 : xy.x - thick / 2;
+      const top  = horizontal ? xy.y - thick  / 2 : xy.y - length / 2;
+      const w = horizontal ? length : thick;
+      const h = horizontal ? thick  : length;
+      // Halo: a wider/taller semi-transparent block under the core
+      const haloW = horizontal ? length + 14 : thick + 10;
+      const haloH = horizontal ? thick + 10  : length + 14;
+      lightNodes.push(
+        <View key={`lh${li}`} pointerEvents="none" style={{
+          position: 'absolute',
+          left: (horizontal ? xy.x - haloW / 2 : xy.x - haloW / 2),
+          top:  (horizontal ? xy.y - haloH / 2 : xy.y - haloH / 2),
+          width: haloW, height: haloH,
+          backgroundColor: 'rgba(0, 240, 255, 0.18)',
+          borderRadius: 4,
+        }} />,
+        <View key={`l${li}`} pointerEvents="none" style={{
+          position: 'absolute',
+          left, top, width: w, height: h,
+          backgroundColor: '#7FFAFF',
+          borderRadius: 2,
+          shadowColor: '#00F0FF',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 1,
+          shadowRadius: 8,
+        }} />
+      );
+    }
+  }
+
+  // Paddle visuals — colour shifts with boost state
+  const playerBoostReady  = !!g && g.playerBoostCD === 0 && g.playerBoostActive === 0;
+  const playerBoostActive = !!g && g.playerBoostActive > 0;
+  const cpuBoostActive    = !!g && g.cpuBoostActive > 0;
+  const playerColor = playerBoostActive ? '#FFF44C' : (playerBoostReady ? '#FFD700' : '#7A5A00');
+  const cpuColor    = cpuBoostActive    ? '#A8FFFF' : '#FFFFFF';
+
   return (
     <View style={s.root} onLayout={onLayout}>
       <View style={s.center}>
@@ -402,13 +582,20 @@ export default function PongGame() {
             </>
           )}
 
+          {/* Speed lights (under paddles/ball so they don't cover them) */}
+          {lightNodes}
+
           {/* CPU paddle (top) */}
           {showField && (
             <View style={{
               position: 'absolute',
               left: g!.cpuX - paddleW / 2, top: PADDLE_MARGIN,
               width: paddleW, height: PADDLE_H,
-              backgroundColor: '#FFF',
+              backgroundColor: cpuColor,
+              shadowColor: cpuBoostActive ? '#00F0FF' : 'transparent',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: cpuBoostActive ? 1 : 0,
+              shadowRadius: cpuBoostActive ? 10 : 0,
             }} />
           )}
 
@@ -418,7 +605,11 @@ export default function PongGame() {
               position: 'absolute',
               left: g!.playerX - paddleW / 2, top: frameH - PADDLE_MARGIN - PADDLE_H,
               width: paddleW, height: PADDLE_H,
-              backgroundColor: '#FFD700',
+              backgroundColor: playerColor,
+              shadowColor: playerBoostActive ? '#FFD700' : 'transparent',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: playerBoostActive ? 1 : 0,
+              shadowRadius: playerBoostActive ? 12 : 0,
             }} />
           )}
 
@@ -512,10 +703,29 @@ export default function PongGame() {
             </Pressable>
             <Text style={[s.hint, { fontFamily: MONO }]}>
               {Platform.OS === 'web'
-                ? 'Drag · Arrow Keys · A/D  to move'
-                : 'Drag anywhere to move'}
+                ? 'Drag · Arrows  move  ·  Space  BOOST'
+                : 'Drag to move  ·  tap BOOST to smash'}
             </Text>
           </View>
+        </View>
+      )}
+
+      {/* Mobile BOOST button (below the frame) */}
+      {Platform.OS !== 'web' && phase === 'playing' && (
+        <View style={s.boostBar}>
+          <Pressable
+            onPress={triggerPlayerBoost}
+            style={[
+              s.boostBtn,
+              playerBoostActive && s.boostBtnActive,
+              !playerBoostReady && !playerBoostActive && s.boostBtnCooldown,
+            ]}
+          >
+            <Text style={[s.boostBtnTxt, { fontFamily: MONO },
+              playerBoostActive && { color: '#000' }]}>
+              {playerBoostActive ? 'SMASH!' : playerBoostReady ? 'BOOST' : 'WAIT'}
+            </Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -551,6 +761,19 @@ const s = StyleSheet.create({
   },
   overlayTop:    { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingTop: 30 },
   overlayBottom: { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingBottom: 20 },
+
+  boostBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    height: 90, alignItems: 'center', justifyContent: 'center',
+  },
+  boostBtn: {
+    paddingHorizontal: 36, paddingVertical: 14,
+    borderWidth: 2, borderColor: '#FFD700',
+    backgroundColor: 'rgba(255,215,0,0.10)',
+  },
+  boostBtnActive: { backgroundColor: '#FFD700', borderColor: '#FFEE40' },
+  boostBtnCooldown: { borderColor: '#555', backgroundColor: 'rgba(120,120,120,0.10)' },
+  boostBtnTxt: { color: '#FFD700', fontSize: 16, letterSpacing: 4, fontWeight: '800' },
 
   titleText: {
     color: '#FFF', fontSize: 36, fontWeight: '800', letterSpacing: 10,
