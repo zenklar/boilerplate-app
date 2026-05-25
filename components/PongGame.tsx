@@ -216,6 +216,9 @@ export default function PongGame() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && phaseRef.current === 'playing') {
+        const g = gsRef.current; if (g) finishRun(g, false); return;
+      }
       const k = e.key.toLowerCase();
       if ((k === 'w' || k === 'shift') && phaseRef.current === 'playing') {
         e.preventDefault(); triggerPlayerBoost();
@@ -836,6 +839,21 @@ export default function PongGame() {
             </Text>
           </View>
         </View>
+      )}
+
+      {/* Give up button (mobile) */}
+      {Platform.OS !== 'web' && phase === 'playing' && (
+        <Pressable
+          onPress={() => { const g = gsRef.current; if (g) finishRun(g, false); }}
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            backgroundColor: '#CC0000',
+            paddingHorizontal: 12, paddingVertical: 6,
+            borderRadius: 4, zIndex: 20,
+          }}
+        >
+          <Text style={{ color: '#fff', fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1 }}>GIVE UP</Text>
+        </Pressable>
       )}
 
       {/* Mobile BOOST button (below the frame) */}

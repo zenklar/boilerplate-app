@@ -235,6 +235,7 @@ export default function TetrisGame() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Escape' && phase === 'playing') { gameOver(); return; }
       if (phase !== 'playing') return;
       switch (e.code) {
         case 'ArrowLeft': case 'KeyA':
@@ -878,6 +879,21 @@ export default function TetrisGame() {
             </Pressable>
           </View>
         </View>
+      )}
+
+      {/* Give up button (mobile) */}
+      {Platform.OS !== 'web' && phase === 'playing' && (
+        <Pressable
+          onPress={gameOver}
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            backgroundColor: '#CC0000',
+            paddingHorizontal: 12, paddingVertical: 6,
+            borderRadius: 4, zIndex: 20,
+          }}
+        >
+          <Text style={{ color: '#fff', fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1 }}>GIVE UP</Text>
+        </Pressable>
       )}
 
       {/* Touch controls (mobile) */}

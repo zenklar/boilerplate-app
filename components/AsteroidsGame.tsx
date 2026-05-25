@@ -303,6 +303,27 @@ export default function AsteroidsGame() {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
+      if (e.code === 'Escape') {
+        const g = gsRef.current;
+        if (g && g.phase === 'playing') {
+          if (thrustSoundRef.current) { thrustSoundRef.current.stop(); thrustSoundRef.current = null; }
+          playShipDestroyed();
+          g.phase = 'gameover';
+          setNewHS(g.score > useGameUIStore.getState().highScore);
+          updateHighScore(g.score);
+          useGameUIStore.getState().addRun({
+            id: String(Date.now()),
+            score: g.score,
+            bulletsShot: g.bulletsShot,
+            asteroidsDestroyed: g.asteroidsDestroyed,
+            durationMs: Date.now() - g.startTime,
+            date: Date.now(),
+          });
+          setIsGamePlaying(false);
+          setTick((t) => t + 1);
+        }
+        return;
+      }
       switch (e.code) {
         case 'Space': e.preventDefault(); ctrl.current.fire = true; break;
         case 'ArrowLeft': case 'KeyA': ctrl.current.left = true; break;
@@ -781,6 +802,30 @@ export default function AsteroidsGame() {
       setIsGamePlaying(true);
     }
   };
+
+  /* ── Give up (ESC / mobile button) ── */
+  const handleGiveUp = useCallback(() => {
+    const g = gsRef.current;
+    if (!g || g.phase !== 'playing') return;
+    if (Platform.OS === 'web' && thrustSoundRef.current) {
+      thrustSoundRef.current.stop();
+      thrustSoundRef.current = null;
+    }
+    if (Platform.OS === 'web') playShipDestroyed();
+    g.phase = 'gameover';
+    setNewHS(g.score > useGameUIStore.getState().highScore);
+    updateHighScore(g.score);
+    useGameUIStore.getState().addRun({
+      id: String(Date.now()),
+      score: g.score,
+      bulletsShot: g.bulletsShot,
+      asteroidsDestroyed: g.asteroidsDestroyed,
+      durationMs: Date.now() - g.startTime,
+      date: Date.now(),
+    });
+    setIsGamePlaying(false);
+    setTick((t) => t + 1);
+  }, [updateHighScore, setIsGamePlaying]);
 
   /* ── Back to menu ── */
   const handleBackToMenu = () => {
@@ -1276,6 +1321,21 @@ export default function AsteroidsGame() {
               </Text>
             )}
           </View>
+        )}
+
+        {/* Give up button (mobile) */}
+        {Platform.OS !== 'web' && isPlaying && (
+          <Pressable
+            onPress={handleGiveUp}
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              backgroundColor: '#CC0000',
+              paddingHorizontal: 12, paddingVertical: 6,
+              borderRadius: 4, zIndex: 20,
+            }}
+          >
+            <Text style={{ color: '#fff', fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1 }}>GIVE UP</Text>
+          </Pressable>
         )}
 
         {/* ── Mobile controls (joystick + fire) ── */}
