@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
+import Svg, { Polygon } from 'react-native-svg';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
@@ -1058,44 +1059,27 @@ export default function AsteroidsGame() {
         {/* Game objects — scaled down in demo/preview mode so they look proportional in the smaller frame */}
         <View style={[StyleSheet.absoluteFillObject, isDemoLayout && { transform: [{ scale: 0.65 }] }]}>
 
-        {/* Asteroids — SVG polygons on web, rounded fallback on native */}
+        {/* Asteroids — jagged polygons via react-native-svg (works on web too) */}
         {g?.asteroids.map((a) => {
           const d = a.radius * 2;
           const pts = asteroidPoints(a);
-          if (Platform.OS === 'web') {
-            // React Native Web runs on React DOM so raw SVG JSX works fine
-            const webStyle: any = {
-              position: 'absolute',
-              left: a.x - a.radius,
-              top: a.y - a.radius,
-              transform: `rotate(${a.rot}deg)`,
-              transformOrigin: `${a.radius}px ${a.radius}px`,
-              overflow: 'visible',
-            };
-            return (
-              // @ts-ignore — valid SVG JSX under React DOM / React Native Web
-              <svg key={a.id} width={d} height={d} style={webStyle}>
-                {/* @ts-ignore */}
-                <polygon points={pts} fill="white" stroke="#CCC" strokeWidth="1.5" />
-              </svg>
-            );
-          }
-          // Native fallback — irregular blob via border-radius
-          const br = a.verts.slice(0, 4).map((v) => v * 0.6);
           return (
             <View
               key={a.id}
               style={{
                 position: 'absolute',
-                width: d, height: d,
-                left: a.x - a.radius, top: a.y - a.radius,
+                left: a.x - a.radius,
+                top: a.y - a.radius,
+                width: d,
+                height: d,
                 transform: [{ rotate: `${a.rot}deg` }],
-                backgroundColor: '#FFF',
-                borderRadius: a.radius * 0.65,
-                borderTopLeftRadius: br[0], borderTopRightRadius: br[1],
-                borderBottomRightRadius: br[2], borderBottomLeftRadius: br[3],
               }}
-            />
+              pointerEvents="none"
+            >
+              <Svg width={d} height={d}>
+                <Polygon points={pts} fill="white" stroke="#CCC" strokeWidth={1.5} />
+              </Svg>
+            </View>
           );
         })}
 

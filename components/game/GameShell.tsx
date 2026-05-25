@@ -73,7 +73,16 @@ export default function GameShell<TabId extends string>({
         </View>
       )}
 
-      <View style={s.content}>{children}</View>
+      <View
+        style={[
+          s.content,
+          // When chrome is hidden the canvas would otherwise extend under the
+          // Android status bar and the iOS notch / Android gesture bar.
+          !chrome && { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
+        {children}
+      </View>
 
       {chrome && (
         <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
