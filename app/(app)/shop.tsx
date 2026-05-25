@@ -368,12 +368,12 @@ function SubscriptionTile() {
 }
 
 /* ── Pack data ──────────────────────────────────────────────────────── */
-type Pack = { id: string; label: string; coins: number; price: string; perCoin: string };
+type Pack = { id: string; label: string; coins: number; price: string; perCoin: string; multiplier?: string };
 
 const PACKS: Pack[] = [
   { id: 'small',  label: 'Small Coin Pack',  coins: 10,   price: '$0.99', perCoin: '$0.099 / coin' },
-  { id: 'medium', label: 'Medium Coin Pack', coins: 100,  price: '$4.99', perCoin: '$0.049 / coin  ·  2× better value' },
-  { id: 'large',  label: 'Large Coin Pack',  coins: 500, price: '$9.99', perCoin: '$0.019 / coin  ·  5× better value' },
+  { id: 'medium', label: 'Medium Coin Pack', coins: 100,  price: '$4.99', perCoin: '$0.049 / coin', multiplier: '2×' },
+  { id: 'large',  label: 'Large Coin Pack',  coins: 500,  price: '$9.99', perCoin: '$0.019 / coin', multiplier: '5×' },
 ];
 
 /* ── Main screen ────────────────────────────────────────────────────── */
@@ -408,20 +408,12 @@ export default function ShopScreen() {
           {PACKS.map((pack, idx) => {
             const isClaimed = claimed === pack.id;
             const isBest = pack.id === 'large';
-            const isMid = pack.id === 'medium';
             return (
               <View
                 key={pack.id}
                 style={[st.packTile, {
                   backgroundColor: theme.colors.card,
-                  borderColor: isBest ? '#FFD700' : theme.colors.cardBorder,
-                  ...(isBest && {
-                    shadowColor: '#FFD700',
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.35,
-                    shadowRadius: 8,
-                    elevation: 4,
-                  }),
+                  borderColor: theme.colors.cardBorder,
                 }]}
               >
                 {isBest && (
@@ -430,24 +422,25 @@ export default function ShopScreen() {
                   </View>
                 )}
 
+                {pack.multiplier && (
+                  <View style={st.multiplierBadge}>
+                    <Text style={st.multiplierTxt}>{pack.multiplier} better value</Text>
+                  </View>
+                )}
+                {!pack.multiplier && <View style={{ height: 20 }} />}
+
                 <PackSprite col={idx} height={80} />
+
+                <Text style={[st.perCoinTxt, { color: theme.colors.textMuted }]}>{pack.perCoin}</Text>
 
                 <Text style={[st.tileCoins, { color: theme.colors.text }]}>
                   {pack.coins.toLocaleString()}
                 </Text>
                 <Text style={[st.tileCoinUnit, { color: theme.colors.textMuted }]}>coins</Text>
 
-                {isMid && (
-                  <Text style={st.tileValueHint}>2× better value</Text>
-                )}
-                {isBest && (
-                  <Text style={[st.tileValueHint, { color: '#FFD700' }]}>5× better value</Text>
-                )}
-                {!isMid && !isBest && <View style={{ height: 14 }} />}
-
                 <TouchableOpacity onPress={() => handleClaim(pack)} activeOpacity={0.8} style={st.tileBuyWrap}>
                   <LinearGradient
-                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : (isBest ? ['#B8860B', '#8B6914'] : ['#43A047', '#2E7D32'])}
+                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : ['#43A047', '#2E7D32']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
                     style={st.tileBuy}
@@ -650,8 +643,13 @@ const st = StyleSheet.create({
   },
   tileCoins: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginTop: 8 },
   tileCoinUnit: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
-  tileValueHint: { fontSize: 10, fontWeight: '600', color: '#4CAF50', marginBottom: 2 },
-  tileBuyWrap: { width: '100%', borderRadius: 10, overflow: 'hidden', marginTop: 6 },
+  perCoinTxt: { fontSize: 10, fontWeight: '400', marginBottom: 6 },
+  multiplierBadge: {
+    backgroundColor: '#1B5E2022', borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 3, marginBottom: 4,
+  },
+  multiplierTxt: { fontSize: 10, fontWeight: '700', color: '#43A047' },
+  tileBuyWrap: { width: '100%', borderRadius: 10, overflow: 'hidden', marginTop: 4 },
   tileBuy: { paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   tileBuyTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   bestBadge: {
