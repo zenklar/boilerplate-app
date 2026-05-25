@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,36 @@ import { useTheme } from '../../theme';
 import { useCoinStore } from '../../store/coinStore';
 import { useSubscriptionStore } from '../../store/subscriptionStore';
 import ArcadeCoin from '../../components/ArcadeCoin';
+
+/* ── Coin pack sprite sheet ─────────────────────────────────────────── */
+// coin packs.png: 1338 × 393 px
+// Actual content bounds: small 49-278, medium 395-724, large 842-1274
+// Crop windows split at gap midpoints (336, 783)
+const PACK_SPRITE = require('../../assets/coin packs/coin packs.png');
+const SPRITE_H = 393;
+const SPRITE_FULL_W = 1338;
+const PACK_CROPS = [
+  { x0: 0,   x1: 336  }, // small  (content 49–278)
+  { x0: 337, x1: 783  }, // medium (content 395–724)
+  { x0: 784, x1: 1337 }, // large  (content 842–1274)
+];
+
+function PackSprite({ col, height = 80 }: { col: number; height?: number }) {
+  const crop = PACK_CROPS[col];
+  const scale = height / SPRITE_H;
+  const imgW = SPRITE_FULL_W * scale;
+  const cropDisplayW = (crop.x1 - crop.x0 + 1) * scale;
+  const offsetX = crop.x0 * scale;
+  return (
+    <View style={{ width: cropDisplayW, height, overflow: 'hidden' }}>
+      <Image
+        source={PACK_SPRITE}
+        style={{ width: imgW, height, position: 'absolute', left: -offsetX }}
+        resizeMode="stretch"
+      />
+    </View>
+  );
+}
 
 /* ── Subscription tile ──────────────────────────────────────────────── */
 const PERKS = [
@@ -374,53 +404,64 @@ export default function ShopScreen() {
         {/* ── Coin packs ── */}
         <Text style={[st.sectionTitle, { color: theme.colors.textMuted, marginTop: 24 }]}>COIN PACKS</Text>
 
-        {PACKS.map((pack) => {
-          const isClaimed = claimed === pack.id;
-          return (
-            <View
-              key={pack.id}
-              style={[st.packCard, {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.cardBorder,
-                ...(theme.mode === 'light' ? {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.07,
-                  shadowRadius: 4,
-                  elevation: 2,
-                } : {}),
-              }]}
-            >
-              <View style={st.packInner}>
-                <View style={st.packInfo}>
-                  <Text style={[st.packLabel, { color: theme.colors.text }]}>{pack.label}</Text>
-                  <View style={st.packCoinRow}>
-                    <ArcadeCoin size={20} />
-                    <Text style={[st.packCoinCount, { color: theme.colors.text }]}>
-                      {pack.coins.toLocaleString()}
-                    </Text>
-                    <Text style={[st.packCoinUnit, { color: theme.colors.textMuted }]}>coins</Text>
+        <View style={st.packsRow}>
+          {PACKS.map((pack, idx) => {
+            const isClaimed = claimed === pack.id;
+            const isBest = pack.id === 'large';
+            const isMid = pack.id === 'medium';
+            return (
+              <View
+                key={pack.id}
+                style={[st.packTile, {
+                  backgroundColor: theme.colors.card,
+                  borderColor: isBest ? '#FFD700' : theme.colors.cardBorder,
+                  ...(isBest && {
+                    shadowColor: '#FFD700',
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 8,
+                    elevation: 4,
+                  }),
+                }]}
+              >
+                {isBest && (
+                  <View style={st.bestBadge}>
+                    <Text style={st.bestBadgeTxt}>BEST</Text>
                   </View>
-                  <Text style={[st.packPerCoin, { color: theme.colors.textMuted }]}>{pack.perCoin}</Text>
-                </View>
+                )}
 
-                <TouchableOpacity onPress={() => handleClaim(pack)} activeOpacity={0.8} style={st.claimBtnWrap}>
+                <PackSprite col={idx} height={80} />
+
+                <Text style={[st.tileCoins, { color: theme.colors.text }]}>
+                  {pack.coins.toLocaleString()}
+                </Text>
+                <Text style={[st.tileCoinUnit, { color: theme.colors.textMuted }]}>coins</Text>
+
+                {isMid && (
+                  <Text style={st.tileValueHint}>2× better value</Text>
+                )}
+                {isBest && (
+                  <Text style={[st.tileValueHint, { color: '#FFD700' }]}>5× better value</Text>
+                )}
+                {!isMid && !isBest && <View style={{ height: 14 }} />}
+
+                <TouchableOpacity onPress={() => handleClaim(pack)} activeOpacity={0.8} style={st.tileBuyWrap}>
                   <LinearGradient
-                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : ['#43A047', '#2E7D32']}
+                    colors={isClaimed ? ['#2E7D32', '#1B5E20'] : (isBest ? ['#B8860B', '#8B6914'] : ['#43A047', '#2E7D32'])}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
-                    style={st.claimBtn}
+                    style={st.tileBuy}
                   >
                     {isClaimed
                       ? <Ionicons name="checkmark" size={18} color="#FFF" />
-                      : <Text style={st.claimBtnTxt}>{pack.price}</Text>
+                      : <Text style={st.tileBuyTxt}>{pack.price}</Text>
                     }
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
 
         <View style={st.footer}>
           <Ionicons name="storefront-outline" size={14} color={theme.colors.textMuted} />
@@ -598,26 +639,27 @@ const st = StyleSheet.create({
   subBtnCancel: { backgroundColor: 'rgba(255,80,80,0.22)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.45)' },
   subBtnTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
-  /* Coin pack cards */
-  packCard: {
-    marginHorizontal: 16, marginBottom: 12,
-    borderRadius: 16, borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+  /* Coin pack tiles */
+  packsRow: {
+    flexDirection: 'row', marginHorizontal: 16, gap: 10,
   },
-  packInner: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
-  packInfo: { flex: 1, gap: 3 },
-  packLabel: { fontSize: 17, fontWeight: '700' },
-  packCoinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  packCoinCount: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
-  packCoinUnit: { fontSize: 12, fontWeight: '500', alignSelf: 'flex-end', marginBottom: 1 },
-  packPerCoin: { fontSize: 11, fontWeight: '400' },
-  claimBtnWrap: { borderRadius: 12, overflow: 'hidden' },
-  claimBtn: {
-    paddingHorizontal: 20, paddingVertical: 12,
-    alignItems: 'center', justifyContent: 'center',
-    minWidth: 72, minHeight: 44,
+  packTile: {
+    flex: 1, borderRadius: 16, borderWidth: 1,
+    paddingHorizontal: 8, paddingTop: 14, paddingBottom: 12,
+    alignItems: 'center', gap: 2, overflow: 'hidden',
   },
-  claimBtnTxt: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  tileCoins: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginTop: 8 },
+  tileCoinUnit: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
+  tileValueHint: { fontSize: 10, fontWeight: '600', color: '#4CAF50', marginBottom: 2 },
+  tileBuyWrap: { width: '100%', borderRadius: 10, overflow: 'hidden', marginTop: 6 },
+  tileBuy: { paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  tileBuyTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  bestBadge: {
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: '#FFD700', borderRadius: 5,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  bestBadgeTxt: { fontSize: 8, fontWeight: '900', color: '#5A3A00', letterSpacing: 0.5 },
 
   footer: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
