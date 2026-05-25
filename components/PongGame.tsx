@@ -206,7 +206,7 @@ export default function PongGame() {
             g.ballY = playerY - halfB - 1;
             g.rally += 1;
             if (g.rally > g.longestRally) g.longestRally = g.rally;
-            if (Platform.OS === 'web') playShoot();
+            if (Platform.OS === 'web' && !isDemo) playShoot();
           }
         }
 
@@ -222,19 +222,19 @@ export default function PongGame() {
             g.ballY = cpuY + halfB + 1;
             g.rally += 1;
             if (g.rally > g.longestRally) g.longestRally = g.rally;
-            if (Platform.OS === 'web') playShoot();
+            if (Platform.OS === 'web' && !isDemo) playShoot();
           }
         }
 
         // Scoring
         if (g.ballY > frame.h + BALL_SIZE) {
           g.cpuScore += 1;
-          if (Platform.OS === 'web') playShipDestroyed();
+          if (Platform.OS === 'web' && !isDemo) playShipDestroyed();
           if (!isDemo && g.cpuScore >= WIN_SCORE) { finishRun(g); }
           else serve(g, frame.w, frame.h, -1);
         } else if (g.ballY < -BALL_SIZE) {
           g.playerScore += 1;
-          if (Platform.OS === 'web') playShipDestroyed();
+          if (Platform.OS === 'web' && !isDemo) playShipDestroyed();
           if (!isDemo && g.playerScore >= WIN_SCORE) { finishRun(g); }
           else serve(g, frame.w, frame.h, 1);
         }
@@ -432,35 +432,6 @@ export default function PongGame() {
             }} />
           )}
 
-          {/* Title overlay */}
-          {isDemoLayout && (
-            <View style={s.overlay} pointerEvents="box-none">
-              <View style={s.overlayTop} pointerEvents="box-none">
-                <Text style={[s.titleText, { fontFamily: MONO }]}>PONG</Text>
-                {highScore > 0 && (
-                  <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                    HIGH SCORE   {highScore}
-                  </Text>
-                )}
-              </View>
-              <View style={s.overlayBottom} pointerEvents="box-none">
-                <Pressable
-                  onPress={handleInsertCoin}
-                  style={[s.menuBtn, coins === 0 && !isSubscribed && s.menuBtnNoCoins]}
-                >
-                  <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
-                    {(coins > 0 || isSubscribed) ? 'INSERT COIN' : 'GET COINS'}
-                  </Text>
-                </Pressable>
-                <Text style={[s.hint, { fontFamily: MONO }]}>
-                  {Platform.OS === 'web'
-                    ? 'Drag · Arrow Keys · A/D  to move'
-                    : 'Drag anywhere to move'}
-                </Text>
-              </View>
-            </View>
-          )}
-
           {/* Coin animation */}
           {phase === 'coinanim' && (
             <View style={StyleSheet.absoluteFill as any} pointerEvents="none">
@@ -517,6 +488,36 @@ export default function PongGame() {
           )}
         </View>
       </View>
+
+      {/* Title + INSERT COIN — positioned in the reserved space ABOVE and
+          BELOW the frame, mirroring Tetris/Snake. */}
+      {isDemoLayout && (
+        <View style={s.overlay} pointerEvents="box-none">
+          <View style={[s.overlayTop, { height: DEMO_RESERVE_TOP }]} pointerEvents="box-none">
+            <Text style={[s.titleText, { fontFamily: MONO }]}>PONG</Text>
+            {highScore > 0 && (
+              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+                HIGH SCORE   {highScore}
+              </Text>
+            )}
+          </View>
+          <View style={[s.overlayBottom, { height: DEMO_RESERVE_BOTTOM }]} pointerEvents="box-none">
+            <Pressable
+              onPress={handleInsertCoin}
+              style={[s.menuBtn, coins === 0 && !isSubscribed && s.menuBtnNoCoins]}
+            >
+              <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
+                {(coins > 0 || isSubscribed) ? 'INSERT COIN' : 'GET COINS'}
+              </Text>
+            </Pressable>
+            <Text style={[s.hint, { fontFamily: MONO }]}>
+              {Platform.OS === 'web'
+                ? 'Drag · Arrow Keys · A/D  to move'
+                : 'Drag anywhere to move'}
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -547,10 +548,9 @@ const s = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingBottom: 60,
   },
-  overlayTop:    { alignItems: 'center', gap: 10 },
-  overlayBottom: { alignItems: 'center', gap: 10 },
+  overlayTop:    { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingTop: 30 },
+  overlayBottom: { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingBottom: 20 },
 
   titleText: {
     color: '#FFF', fontSize: 36, fontWeight: '800', letterSpacing: 10,
