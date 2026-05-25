@@ -111,6 +111,25 @@ export function playCoinInsert(): void {
   });
 }
 
+/** Jubilant ascending arpeggio — played when daily reward coins are collected */
+export function playCoinCollect(): void {
+  const a = ac(); if (!a) return;
+  // Rising major arpeggio: C5 E5 G5 C6 with a final sparkle
+  const notes = [523, 659, 784, 1047, 1319];
+  notes.forEach((freq, i) => {
+    const osc = a.createOscillator();
+    const gain = a.createGain();
+    osc.connect(gain); gain.connect(comp());
+    osc.type = i < 4 ? 'square' : 'sine';
+    const t = a.currentTime + i * 0.07;
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.setValueAtTime(freq * 1.04, t + 0.015);
+    gain.gain.setValueAtTime(0.22, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc.start(t); osc.stop(t + 0.2);
+  });
+}
+
 /** Single countdown beep — higher pitch for final tick */
 export function playCountdownBeep(n: 3 | 2 | 1): void {
   const a = ac(); if (!a) return;

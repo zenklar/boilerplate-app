@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTheme } from '../../theme';
 import { GAME_LIST, GameEntry } from '../../constants/gameList';
+import DailyLoginTile from '../../components/DailyLoginTile';
 
 const COLS = 3;
 const TILE_GAP = 10;
@@ -75,6 +76,9 @@ export default function HomeScreen() {
         contentContainerStyle={[st.scroll, { paddingBottom: theme.spacing.xxl }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Daily login bonus */}
+        <DailyLoginTile />
+
         {/* Grid */}
         <View style={[st.grid, { paddingHorizontal: H_PAD, gap: TILE_GAP }]}>
           {GAME_LIST.map((game) => (
