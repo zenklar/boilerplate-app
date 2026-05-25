@@ -13,24 +13,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 
 interface Props {
+  variant?: 'general' | 'games';
   onDeleteAccount?: () => void;
   onPrivacyPolicy?: () => void;
+  onGoToShop?: () => void;
 }
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-const FAQS = [
+const GENERAL_FAQS = [
   {
-    question: 'How do I get started?',
+    question: 'How do I cancel my Arcade Pass subscription?',
     answer:
-      'Replace this with your actual FAQ content. Update FaqAccordion.tsx with questions relevant to your app.',
-  },
-  {
-    question: 'How do I cancel my subscription?',
-    answer:
-      'Go to Settings → Manage Subscription to cancel at any time. Changes take effect at the end of your billing period.',
+      'You can cancel your Arcade Pass at any time from the Shop page. Tap the button below to go there — your access continues until the end of the current billing period.',
+    action: 'shop' as const,
   },
   {
     question: 'How do I contact support?',
@@ -51,9 +49,33 @@ const FAQS = [
   },
 ];
 
-export default function FaqAccordion({ onDeleteAccount, onPrivacyPolicy }: Props) {
+const GAME_FAQS = [
+  {
+    question: 'How do I play Asteroids?',
+    answer:
+      'Destroy incoming asteroids and enemy saucers before they destroy you. Each asteroid splits into smaller, faster fragments — clear them all to advance a level.\n\nControls (mobile): Use the floating joystick on the left to rotate and thrust your ship. Tap the FIRE button on the right to shoot.\n\nControls (web): Move your mouse to aim and thrust the ship. Press Space to fire.',
+  },
+  {
+    question: 'How do I play Pong?',
+    answer:
+      'Face off against a CPU opponent in a best-of-5 match. Score goals by getting the ball past the CPU\'s paddle. First to win 3 rounds wins the match.\n\nControls (mobile): Drag anywhere on the play field to slide your paddle. Tap the BOOST button below to smash the ball with extra speed.\n\nControls (web): Move your mouse over the play field to control the paddle. Left-click to trigger a BOOST.',
+  },
+  {
+    question: 'How do I play Snake?',
+    answer:
+      'Guide your snake to eat the food pellets and grow as long as possible without running into yourself. The snake wraps around walls Nokia-style and speeds up with each level.\n\nControls (mobile): Use the D-pad (▲ ▼ ◀ ▶) at the bottom of the screen to change direction.\n\nControls (web): Press the Arrow keys or WASD to steer.',
+  },
+  {
+    question: 'How do I play Tetris?',
+    answer:
+      'Stack the falling tetrominoes to complete full horizontal lines, which then clear and score points. The game ends when pieces stack to the top.\n\nControls (mobile): ◀ / ▶ to move left or right, ⟳ to rotate clockwise, ▼ to soft-drop, ⤓ to hard-drop instantly.\n\nControls (web): Move your mouse to slide the piece, click to rotate, press ↓ for soft-drop, Space for hard-drop.',
+  },
+];
+
+export default function FaqAccordion({ variant = 'general', onDeleteAccount, onPrivacyPolicy, onGoToShop }: Props) {
   const { theme } = useTheme();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const faqs = variant === 'games' ? GAME_FAQS : GENERAL_FAQS;
 
   function toggle(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -62,9 +84,9 @@ export default function FaqAccordion({ onDeleteAccount, onPrivacyPolicy }: Props
 
   return (
     <View>
-      {FAQS.map((faq, i) => {
+      {faqs.map((faq, i) => {
         const isOpen = openIndex === i;
-        const isLast = i === FAQS.length - 1;
+        const isLast = i === faqs.length - 1;
         return (
           <View
             key={i}
@@ -106,6 +128,23 @@ export default function FaqAccordion({ onDeleteAccount, onPrivacyPolicy }: Props
                 >
                   {faq.answer}
                 </Text>
+                {'action' in faq && faq.action === 'shop' && onGoToShop && (
+                  <TouchableOpacity
+                    style={[styles.actionBtnWrap, { borderRadius: theme.radius.md }]}
+                    onPress={onGoToShop}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={theme.gradients.primary}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.actionBtn, { borderRadius: theme.radius.md }]}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color="#fff" />
+                      <Text style={styles.actionBtnText}>Manage Arcade Pass</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
                 {'action' in faq && faq.action === 'delete' && onDeleteAccount && (
                   <TouchableOpacity
                     style={[styles.actionBtnWrap, { borderRadius: theme.radius.md }]}

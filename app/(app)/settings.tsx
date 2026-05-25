@@ -1,8 +1,8 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, ToastAndroid, Platform, Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -32,6 +32,7 @@ const SOCIAL_ICONS: ({ key: keyof typeof SOCIAL_URLS; label: string } & SocialIc
 ];
 
 export default function Settings() {
+  const router = useRouter();
   const { theme, themeMode, setThemeMode } = useTheme();
   const profile = useProfileStore((s) => s.profile);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -74,17 +75,11 @@ export default function Settings() {
                 return (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[styles.appearanceOption, { borderRadius: theme.radius.sm, marginLeft: i > 0 ? 8 : 0, overflow: 'hidden' }]}
+                    style={[styles.appearanceOption, { borderRadius: theme.radius.sm, marginLeft: i > 0 ? 8 : 0, backgroundColor: theme.colors.text }]}
                     onPress={() => setThemeMode(opt.value)}
                     activeOpacity={0.8}
                   >
-                    <LinearGradient
-                      colors={theme.gradients.primary}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={[StyleSheet.absoluteFill]}
-                    />
-                    <Text style={[styles.appearanceLabel, { color: theme.colors.primaryText, fontSize: theme.fontSize.sm }]}>
+                    <Text style={[styles.appearanceLabel, { color: theme.colors.background, fontSize: theme.fontSize.sm }]}>
                       {opt.label}
                     </Text>
                   </TouchableOpacity>
@@ -116,14 +111,11 @@ export default function Settings() {
         {/* ACCOUNT SECTION */}
         <SettingsSection title="Account">
           <View style={[styles.accountHeader, { borderBottomColor: theme.colors.separator, borderBottomWidth: StyleSheet.hairlineWidth }]}>
-            <LinearGradient
-              colors={theme.gradients.avatar}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatar}
+            <View
+              style={[styles.avatar, { backgroundColor: theme.colors.text }]}
             >
-              <Text style={[styles.avatarText, { color: theme.colors.primaryText }]}>{initials}</Text>
-            </LinearGradient>
+              <Text style={[styles.avatarText, { color: theme.colors.background }]}>{initials}</Text>
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.accountName, { color: theme.colors.text, fontSize: theme.fontSize.lg }]}>{fullName}</Text>
               <Text style={[styles.accountEmail, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm }]} numberOfLines={1}>
@@ -133,7 +125,7 @@ export default function Settings() {
           </View>
           <View style={[styles.uuidRowWrap, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.separator }]}>
             <View style={styles.iconWrap}>
-              <Ionicons name="finger-print-outline" size={18} color={theme.colors.primary} />
+              <Ionicons name="finger-print-outline" size={18} color={theme.colors.text} />
             </View>
             <Text selectable style={[styles.uuidText, { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, fontFamily: 'monospace' }]}>
               {profile?.id ?? 'N/A'}
@@ -160,7 +152,13 @@ export default function Settings() {
           <FaqAccordion
             onDeleteAccount={() => setShowDeleteAccount(true)}
             onPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+            onGoToShop={() => router.push('/(app)/shop')}
           />
+        </SettingsSection>
+
+        {/* GAME GUIDES SECTION */}
+        <SettingsSection title="Game Guides">
+          <FaqAccordion variant="games" />
         </SettingsSection>
 
         {/* FOLLOW US SECTION */}

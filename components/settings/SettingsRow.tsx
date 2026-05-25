@@ -37,7 +37,7 @@ export default function SettingsRow({
     >
       {icon && (
         <View style={styles.iconWrap}>
-          <Ionicons name={icon} size={18} color={theme.colors.primary} />
+          <Ionicons name={icon} size={18} color={theme.colors.text} />
         </View>
       )}
       <Text
