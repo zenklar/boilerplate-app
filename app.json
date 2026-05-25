@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "MY_APP_NAME",
-    "slug": "boilerplate-app",
+    "name": "Arcade King",
+    "slug": "arcade-king",
+    "owner": "raizen-corporation",
     "version": "1.0.0",
     "scheme": "boilerplate-app",
     "orientation": "portrait",
@@ -22,6 +23,11 @@
     },
     "web": { "favicon": "./assets/favicon.png" },
     "plugins": ["expo-router"],
-    "experiments": { "typedRoutes": true }
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "eas": {
+        "projectId": "95e84610-f6db-421a-b154-bea24dbf673e"
+      }
+    }
   }
 }
