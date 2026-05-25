@@ -50,6 +50,6 @@ export const GAME_LIST: GameEntry[] = [
     available: true,
     route: '/game/pong',
     accentColor: '#FFFFFF',
-    image: require('../assets/games/placeholder.png'),
+    image: require('../assets/games/pong.png'),
   },
 ];
