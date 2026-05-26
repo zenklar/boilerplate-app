@@ -6,7 +6,6 @@ import {
   Pressable,
   LayoutChangeEvent,
   Platform,
-  PanResponder,
   Animated,
   Image,
 } from 'react-native';
@@ -232,8 +231,8 @@ const AsteroidShape = React.memo(function AsteroidShape({ d, pts }: { d: number;
 /** Demo-mode AI: rotates the ship toward the nearest asteroid (with bullet
  *  lead) and fires when aligned. Ship doesn't thrust — it drifts only after a
  *  collision teleport. */
-function runDemoAI(g: GS, c: { left: boolean; right: boolean; thrust: boolean; fire: boolean; fireCD: number }) {
-  c.left = false; c.right = false; c.thrust = false; c.fire = false;
+function runDemoAI(g: GS, c: { left: boolean; right: boolean; thrustPower: number; fire: boolean; fireCD: number }) {
+  c.left = false; c.right = false; c.thrustPower = 0; c.fire = false;
   if (g.asteroids.length === 0) return;
   let nearest = g.asteroids[0];
   let nDist = d2(g.sx, g.sy, nearest.x, nearest.y);
@@ -287,7 +286,7 @@ export default function AsteroidsGame() {
   const thrustSoundRef = useRef<{ stop: () => void } | null>(null);
   // Game object bounds (game area height = canvas height - ctrl overlay height)
   const dimRef = useRef({ w: 0, h: 0 });
-  const ctrl = useRef({ left: false, right: false, thrust: false, fire: false, fireCD: 0 });
+  const ctrl = useRef({ left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 });
   const frame = useRef(0);
   const pendingStart = useRef(false);
   const pendingFlyInTicks = useRef<number | undefined>(undefined);
@@ -296,9 +295,16 @@ export default function AsteroidsGame() {
   const canvasOrigin = useRef({ x: 0, y: 0 });
   const mousePos = useRef({ x: 0, y: 0 });
   // Joystick state (mobile)
-  const joyActive = useRef(false);
   const joyCtr = useRef({ x: 70, y: 70 });
   const joyOff = useRef({ x: 0, y: 0 });
+  // Multitouch tracking: each control zone independently tracks its own touch identifier
+  const joyTouchId = useRef<number | null>(null);
+  const fireActive = useRef(false);
+  // joyZone page-space origin measured via measureInWindow so touch pageX/Y can be
+  // converted to joyZone-local coords reliably (changedTouches.locationX/Y are relative
+  // to the child element that was touched, not the zone View, causing jumping).
+  const joyZoneRef = useRef<View>(null);
+  const joyOrigin = useRef({ x: 0, y: 0 });
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
   const coins    = useCoinStore((s) => s.coins);
@@ -347,7 +353,7 @@ export default function AsteroidsGame() {
         case 'Space': e.preventDefault(); ctrl.current.fire = true; break;
         case 'ArrowLeft': case 'KeyA': ctrl.current.left = true; break;
         case 'ArrowRight': case 'KeyD': ctrl.current.right = true; break;
-        case 'ArrowUp': case 'KeyW': ctrl.current.thrust = true; break;
+        case 'ArrowUp': case 'KeyW': ctrl.current.thrustPower = 1; break;
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -355,19 +361,19 @@ export default function AsteroidsGame() {
         case 'Space': ctrl.current.fire = false; break;
         case 'ArrowLeft': case 'KeyA': ctrl.current.left = false; break;
         case 'ArrowRight': case 'KeyD': ctrl.current.right = false; break;
-        case 'ArrowUp': case 'KeyW': ctrl.current.thrust = false; break;
+        case 'ArrowUp': case 'KeyW': ctrl.current.thrustPower = 0; break;
       }
     };
     const onMouseMove = (e: MouseEvent) => {
       mousePos.current = { x: e.clientX, y: e.clientY };
       // Detect if LMB was released outside the window (mouseup missed)
-      if (!(e.buttons & 1)) ctrl.current.thrust = false;
+      if (!(e.buttons & 1)) ctrl.current.thrustPower = 0;
     };
-    const onMouseDown = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = true; };
-    const onMouseUp = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrust = false; };
+    const onMouseDown = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrustPower = 1; };
+    const onMouseUp = (e: MouseEvent) => { if (e.button === 0) ctrl.current.thrustPower = 0; };
     // Release all controls if the window loses focus
     const onBlur = () => {
-      ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
+      ctrl.current = { left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 };
     };
     // Prevent right-click context menu swallowing mouseup
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -478,10 +484,10 @@ export default function AsteroidsGame() {
       }
 
       /* Thrust + particle spawn + thrust sound */
-      if (c.thrust) {
+      if (c.thrustPower > 0) {
         const r = toR(g.sAngle - 90);
-        g.svx += Math.cos(r) * THRUST_PWR;
-        g.svy += Math.sin(r) * THRUST_PWR;
+        g.svx += Math.cos(r) * THRUST_PWR * c.thrustPower;
+        g.svy += Math.sin(r) * THRUST_PWR * c.thrustPower;
         const spd = Math.sqrt(g.svx ** 2 + g.svy ** 2);
         if (spd > MAX_SPD) {
           g.svx = (g.svx / spd) * MAX_SPD;
@@ -494,10 +500,12 @@ export default function AsteroidsGame() {
         const exhaustR = toR(g.sAngle + 90);
         const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
         const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
-        for (let i = 0; i < PARTICLE_SPAWN; i++) {
+        // Scale particle count with thrust power so gentle pushes emit fewer sparks
+        const particleCount = Math.max(1, Math.round(PARTICLE_SPAWN * c.thrustPower));
+        for (let i = 0; i < particleCount; i++) {
           const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
           const pDir = exhaustR + spread;
-          const pSpd = rand(0.8, 2.0);
+          const pSpd = rand(0.8, 2.0) * c.thrustPower;
           g.particles.push({
             id: uid(),
             x: ex + rand(-2, 2), y: ey + rand(-2, 2),
@@ -914,8 +922,9 @@ export default function AsteroidsGame() {
       gsRef.current.enemies = [];
       gsRef.current.enemyBullets = [];
     }
-    ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
-    joyActive.current = false;
+    ctrl.current = { left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 };
+    joyTouchId.current = null;
+    fireActive.current = false;
     joyOff.current = { x: 0, y: 0 };
     setNewHS(false);
     setTick((t) => t + 1);
@@ -1007,7 +1016,7 @@ export default function AsteroidsGame() {
     }
     // Clear any control state left over from the AI (otherwise fire=true
     // from the last AI tick will make the ship auto-shoot on game start).
-    ctrl.current = { left: false, right: false, thrust: false, fire: false, fireCD: 0 };
+    ctrl.current = { left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 };
     runCoinAnimation();
   }, [isSubscribed, coins, spendCoin, runCoinAnimation]);
 
@@ -1051,44 +1060,26 @@ export default function AsteroidsGame() {
     }
   };
 
-  /* ── Joystick PanResponder (mobile only) ── */
-  const joystickPR = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        joyActive.current = true;
-        const rawDx = evt.nativeEvent.locationX - joyCtr.current.x;
-        const rawDy = evt.nativeEvent.locationY - joyCtr.current.y;
-        const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
-        const clamped = Math.min(dist, JOY_MAX);
-        const angle = Math.atan2(rawDy, rawDx);
-        joyOff.current = { x: Math.cos(angle) * clamped, y: Math.sin(angle) * clamped };
-        if (dist > JOY_DEAD && gsRef.current) {
-          gsRef.current.sAngle = angle * (180 / Math.PI) + 90;
-        }
-      },
-      onPanResponderMove: (evt) => {
-        const rawDx = evt.nativeEvent.locationX - joyCtr.current.x;
-        const rawDy = evt.nativeEvent.locationY - joyCtr.current.y;
-        const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
-        const clamped = Math.min(dist, JOY_MAX);
-        const angle = Math.atan2(rawDy, rawDx);
-        joyOff.current = { x: Math.cos(angle) * clamped, y: Math.sin(angle) * clamped };
-        if (dist > JOY_DEAD && gsRef.current) {
-          gsRef.current.sAngle = angle * (180 / Math.PI) + 90;
-        }
-      },
-      onPanResponderRelease: () => {
-        joyOff.current = { x: 0, y: 0 };
-        joyActive.current = false;
-      },
-      onPanResponderTerminate: () => {
-        joyOff.current = { x: 0, y: 0 };
-        joyActive.current = false;
-      },
-    }),
-  ).current;
+  /* ── Joystick helpers (mobile only) ── */
+  /** Update joystick state from a touch position within the joyZone View.
+   *  Sets ship angle and proportional thrust based on displacement from center.
+   *  Dead zone near center prevents jitter. */
+  const updateJoystick = (lx: number, ly: number) => {
+    const rawDx = lx - joyCtr.current.x;
+    const rawDy = ly - joyCtr.current.y;
+    const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+    const angle = Math.atan2(rawDy, rawDx);
+    const clamped = Math.min(dist, JOY_MAX);
+    joyOff.current = { x: Math.cos(angle) * clamped, y: Math.sin(angle) * clamped };
+    if (dist > JOY_DEAD) {
+      // Point ship in joystick direction and scale thrust linearly with distance
+      if (gsRef.current) gsRef.current.sAngle = angle * (180 / Math.PI) + 90;
+      ctrl.current.thrustPower = Math.min(1, (clamped - JOY_DEAD) / (JOY_MAX - JOY_DEAD));
+    } else {
+      // Inside dead zone — stop thrusting but keep last ship angle
+      ctrl.current.thrustPower = 0;
+    }
+  };
 
   /* ── Render helpers ── */
   const g = gsRef.current;
@@ -1376,9 +1367,8 @@ export default function AsteroidsGame() {
             <GameControlsInfo
               gameTitle="ASTEROIDS"
               mobileControls={[
-                { keyText: 'JOYSTICK', actionText: 'Steer the ship.' },
-                { keyText: 'MOVE (HOLD)', actionText: 'Apply thrust while held.' },
-                { keyText: 'FIRE (HOLD)', actionText: 'Continuously fire while held.' },
+                { keyText: 'JOYSTICK', actionText: 'Aim + thrust. Pull farther for more power.' },
+                { keyText: 'FIRE (HOLD)', actionText: 'Shoot continuously while held.' },
               ]}
               webControls={[
                 { keyText: 'MOUSE', actionText: 'Aim the ship direction.' },
@@ -1466,23 +1456,70 @@ export default function AsteroidsGame() {
           </Pressable>
         )}
 
-        {/* ── Mobile controls (joystick + fire) ── */}
+        {/* ── Mobile controls — multitouch: left zone = joystick, right zone = fire ── */}
         {Platform.OS !== 'web' && isPlaying && (
           <View style={s.ctrlOverlay}>
-            {/* Fixed joystick */}
+
+            {/* LEFT ZONE: joystick — raw touch events, no PanResponder so fire can fire simultaneously */}
             <View
-              style={s.joyArea}
-              {...joystickPR.panHandlers}
+              ref={joyZoneRef}
+              style={s.joyZone}
               onLayout={(e) => {
                 const { width, height } = e.nativeEvent.layout;
                 joyCtr.current = { x: width / 2, y: height / 2 };
+                // Measure absolute page position so touch pageX/Y → local coords conversion
+                // is always correct regardless of which child element was the touch target.
+                // (changedTouches.locationX/Y are relative to the CHILD hit element, not
+                //  this View, which causes the thumb to jump around erratically.)
+                joyZoneRef.current?.measureInWindow((px, py) => {
+                  joyOrigin.current = { x: px, y: py };
+                });
+              }}
+              onTouchStart={(e) => {
+                if (joyTouchId.current !== null) return; // already tracking a joystick touch
+                const t = e.nativeEvent.changedTouches[0];
+                joyTouchId.current = t.identifier as unknown as number;
+                updateJoystick(t.pageX - joyOrigin.current.x, t.pageY - joyOrigin.current.y);
+              }}
+              onTouchMove={(e) => {
+                const changed = e.nativeEvent.changedTouches;
+                for (let i = 0; i < changed.length; i++) {
+                  if ((changed[i].identifier as unknown as number) === joyTouchId.current) {
+                    updateJoystick(changed[i].pageX - joyOrigin.current.x, changed[i].pageY - joyOrigin.current.y);
+                    break;
+                  }
+                }
+              }}
+              onTouchEnd={(e) => {
+                const changed = e.nativeEvent.changedTouches;
+                for (let i = 0; i < changed.length; i++) {
+                  if ((changed[i].identifier as unknown as number) === joyTouchId.current) {
+                    joyTouchId.current = null;
+                    joyOff.current = { x: 0, y: 0 };
+                    ctrl.current.thrustPower = 0;
+                    break;
+                  }
+                }
+              }}
+              onTouchCancel={() => {
+                joyTouchId.current = null;
+                joyOff.current = { x: 0, y: 0 };
+                ctrl.current.thrustPower = 0;
               }}
             >
-              {/* Base ring — always visible */}
+              {/* Outer base ring */}
               <View style={[s.joyBase, {
                 left: joyCtr.current.x - JOY_MAX,
                 top: joyCtr.current.y - JOY_MAX,
               }]} />
+              {/* Dead zone ring — subtle inner circle shows the neutral area */}
+              <View style={{
+                position: 'absolute',
+                width: JOY_DEAD * 2, height: JOY_DEAD * 2, borderRadius: JOY_DEAD,
+                borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+                left: joyCtr.current.x - JOY_DEAD,
+                top: joyCtr.current.y - JOY_DEAD,
+              }} />
               {/* Thumb */}
               <View style={[s.joyThumb, {
                 left: joyCtr.current.x + joyOff.current.x - JOY_THUMB_R,
@@ -1490,31 +1527,27 @@ export default function AsteroidsGame() {
               }]} />
             </View>
 
-            {/* MOVE button */}
-            <Pressable
-              style={({ pressed }: { pressed: boolean }) => [
-                s.moveBtn,
-                s.moveBtnPos,
-                pressed && s.moveBtnActive,
-              ]}
-              onPressIn={() => { ctrl.current.thrust = true; }}
-              onPressOut={() => { ctrl.current.thrust = false; }}
+            {/* RIGHT ZONE: fire — independent touch area, works simultaneously with joystick */}
+            <View
+              style={s.fireZone}
+              onTouchStart={() => {
+                fireActive.current = true;
+                ctrl.current.fire = true;
+              }}
+              onTouchEnd={() => {
+                fireActive.current = false;
+                ctrl.current.fire = false;
+              }}
+              onTouchCancel={() => {
+                fireActive.current = false;
+                ctrl.current.fire = false;
+              }}
             >
-              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>MOVE</Text>
-            </Pressable>
+              <View style={[s.fireBtn, fireActive.current && s.fireBtnActive]}>
+                <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
+              </View>
+            </View>
 
-            {/* Fire button */}
-            <Pressable
-              style={({ pressed }: { pressed: boolean }) => [
-                s.fireBtn,
-                s.fireBtnPos,
-                pressed && s.fireBtnActive,
-              ]}
-              onPressIn={() => { ctrl.current.fire = true; }}
-              onPressOut={() => { ctrl.current.fire = false; }}
-            >
-              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
-            </Pressable>
           </View>
         )}
       </View>
@@ -1540,9 +1573,8 @@ export default function AsteroidsGame() {
               <GameControlsInfo
                 gameTitle="ASTEROIDS"
                 mobileControls={[
-                  { keyText: 'JOYSTICK', actionText: 'Steer the ship.' },
-                  { keyText: 'MOVE (HOLD)', actionText: 'Apply thrust while held.' },
-                  { keyText: 'FIRE (HOLD)', actionText: 'Continuously fire while held.' },
+                  { keyText: 'JOYSTICK', actionText: 'Aim + thrust. Pull farther for more power.' },
+                  { keyText: 'FIRE (HOLD)', actionText: 'Shoot continuously while held.' },
                 ]}
                 webControls={[
                   { keyText: 'MOUSE', actionText: 'Aim the ship direction.' },
@@ -1727,17 +1759,16 @@ const s = StyleSheet.create({
   ctrlOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CTRL_H,
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row',
+  },
+
+  /* Joystick zone — left 58% of the control strip */
+  joyZone: {
+    flex: 0.58,
+    height: CTRL_H,
   },
 
   /* Joystick */
-  joyArea: {
-    position: 'absolute',
-    left: '5%',
-    bottom: '50%',
-    width: 220,
-    height: CTRL_H,
-  },
   joyBase: {
     position: 'absolute',
     width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
@@ -1751,42 +1782,24 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
   },
 
+  /* Fire zone — right 42% of the control strip */
+  fireZone: {
+    flex: 0.42,
+    height: CTRL_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   /* Fire button */
-  rightBtns: {
-    position: 'absolute',
-    pointerEvents: 'none',
-  },
-  moveBtn: {
-    width: 60, height: 60, borderRadius: 30,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  moveBtnPos: {
-    position: 'absolute',
-    right: '13%',
-    top: '0%',
-    pointerEvents: 'auto',
-  },
-  moveBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderColor: 'rgba(255,255,255,0.8)',
-  },
   fireBtn: {
-    width: 60, height: 60, borderRadius: 30,
-    borderWidth: 2, borderColor: '#8B0000',
-    backgroundColor: 'rgba(139,0,0,0.2)',
+    width: 80, height: 80, borderRadius: 40,
+    borderWidth: 2.5, borderColor: '#8B0000',
+    backgroundColor: 'rgba(139,0,0,0.22)',
     justifyContent: 'center', alignItems: 'center',
-  },
-  fireBtnPos: {
-    position: 'absolute',
-    right: '20%',
-    top: '-60%',
-    pointerEvents: 'auto',
   },
   fireBtnActive: {
-    backgroundColor: 'rgba(220,0,0,0.5)',
-    borderColor: '#FF3333',
+    backgroundColor: 'rgba(220,0,0,0.55)',
+    borderColor: '#FF4444',
   },
   fireBtnTxt: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
 });
