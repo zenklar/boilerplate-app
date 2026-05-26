@@ -547,10 +547,10 @@ export default function PongGame() {
     if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
     else playCountdownGo();
     Animated.parallel([
-      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
+      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
       Animated.sequence([
         Animated.delay(n > 0 ? 550 : 400),
-        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
       ]),
     ]).start(({ finished }) => {
       if (!finished) return;
@@ -568,12 +568,12 @@ export default function PongGame() {
     setPhase('coinanim');
     playCoinInsert();
     Animated.parallel([
-      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
-      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),
+      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: Platform.OS !== 'web' }),
     ]).start(() => {
       Animated.sequence([
-        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: true }),
-        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: true }),
+        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: Platform.OS !== 'web' }),
       ]).start(() => {
         setPhase('countdown');
         runCountdown(3);
@@ -667,26 +667,30 @@ export default function PongGame() {
     const c1 = `rgba(255,255,255,${f1.toFixed(2)})`;
     const c2 = `rgba(255,255,255,${f2.toFixed(2)})`;
     const isAndroid = Platform.OS === 'android';
-    const glow1 = isAndroid ? null : { shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: f1, shadowRadius: 12 };
-    const glow2 = isAndroid ? null : { shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: f2, shadowRadius: 12 };
+    const glow1 = isAndroid ? null : { boxShadow: `0px 0px 12px rgba(255,255,255,${f1.toFixed(2)})` };
+    const glow2 = isAndroid ? null : { boxShadow: `0px 0px 12px rgba(255,255,255,${f2.toFixed(2)})` };
     electricNodes.push(
-      <View key="et" pointerEvents="none" style={{
+      <View key="et" style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: thick,
+        pointerEvents: 'none',
         backgroundColor: c1,
         ...glow1,
       }} />,
-      <View key="eb" pointerEvents="none" style={{
+      <View key="eb" style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: thick,
+        pointerEvents: 'none',
         backgroundColor: c2,
         ...glow2,
       }} />,
-      <View key="el" pointerEvents="none" style={{
+      <View key="el" style={{
         position: 'absolute', top: 0, left: 0, bottom: 0, width: thick,
+        pointerEvents: 'none',
         backgroundColor: c1,
         ...glow1,
       }} />,
-      <View key="er" pointerEvents="none" style={{
+      <View key="er" style={{
         position: 'absolute', top: 0, right: 0, bottom: 0, width: thick,
+        pointerEvents: 'none',
         backgroundColor: c2,
         ...glow2,
       }} />,
@@ -725,9 +729,10 @@ export default function PongGame() {
 
           {/* CPU paddle (top) */}
           {showField && cpuBoostActive && (
-            <View pointerEvents="none" style={{
+            <View style={{
               position: 'absolute',
               left: g!.cpuX - paddleW / 2 - 10, top: PADDLE_MARGIN - 8,
+              pointerEvents: 'none',
               width: paddleW + 20, height: PADDLE_H + 16,
               backgroundColor: 'rgba(0, 220, 255, 0.28)',
               borderRadius: 4,
@@ -740,10 +745,7 @@ export default function PongGame() {
               width: paddleW, height: PADDLE_H,
               backgroundColor: cpuColor,
               ...(Platform.OS === 'android' ? null : {
-                shadowColor: cpuBoostActive ? '#00EEFF' : 'transparent',
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: cpuBoostActive ? 1 : 0,
-                shadowRadius: cpuBoostActive ? 20 : 0,
+                boxShadow: cpuBoostActive ? '0px 0px 20px rgba(0, 238, 255, 1)' : 'none',
               }),
             }} />
           )}
@@ -757,10 +759,7 @@ export default function PongGame() {
               width: paddleW, height: PADDLE_H,
               backgroundColor: playerColor,
               ...(Platform.OS === 'android' ? null : {
-                shadowColor: playerBoostReady ? '#FFD700' : 'transparent',
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: playerBoostReady ? 0.35 : 0,
-                shadowRadius: playerBoostReady ? 6 : 0,
+                boxShadow: playerBoostReady ? '0px 0px 6px rgba(255, 215, 0, 0.35)' : 'none',
               }),
             }} />
           )}
@@ -786,11 +785,11 @@ export default function PongGame() {
             style={[s.sliderBar, { width: frameW, marginTop: 8 }]}
             {...(phase === 'playing' ? panResponder.panHandlers : {})}
           >
-            <Text style={[s.sliderHintTop, { fontFamily: MONO }]} pointerEvents="none">
+            <Text style={[s.sliderHintTop, { fontFamily: MONO }]}>
               TOUCH TO MOVE
             </Text>
             <View style={s.sliderTrack} />
-            <Text style={[s.sliderHintBottom, { fontFamily: MONO }]} pointerEvents="none">
+            <Text style={[s.sliderHintBottom, { fontFamily: MONO }]}>
               DOUBLE TAP TO BOUNCE
             </Text>
           </View>
@@ -800,7 +799,7 @@ export default function PongGame() {
       {/* Coin animation — root-level overlay so it always centres on the
           actual screen, not the play frame. */}
       {phase === 'coinanim' && (
-        <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+        <View style={[s.insertOverlay, { width: area.w, height: area.h }, { pointerEvents: 'none' }]}>
           <Animated.View style={[s.fallingCoin, {
             left: area.w / 2 - 28,
             transform: [{ translateY: coinY }, { scale: coinScale }],
@@ -814,7 +813,7 @@ export default function PongGame() {
       {/* Countdown — root-level overlay so it always centres on the actual
           screen, not the play frame. */}
       {phase === 'countdown' && (
-        <View style={[s.countdownOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+        <View style={[s.countdownOverlay, { width: area.w, height: area.h }, { pointerEvents: 'none' }]}>
           <Animated.Text style={[
             s.countdownText, { fontFamily: MONO },
             { transform: [{ scale: cdScale }], opacity: cdOpacity },
@@ -870,13 +869,13 @@ export default function PongGame() {
           BELOW the frame, mirroring Tetris/Snake. */}
       {isDemoLayout && (
         <>
-          <View style={[s.overlayTop, { height: DEMO_RESERVE_TOP }]} pointerEvents="box-none">
+          <View style={[s.overlayTop, { height: DEMO_RESERVE_TOP }, { pointerEvents: 'box-none' }]}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>PONG</Text>
             <Text style={[s.hiLabel, { fontFamily: MONO }]}>
               HIGH SCORE   {highScore}
             </Text>
           </View>
-          <View style={[s.overlayBottom, { height: DEMO_RESERVE_BOTTOM }]} pointerEvents="box-none">
+          <View style={[s.overlayBottom, { height: DEMO_RESERVE_BOTTOM }, { pointerEvents: 'box-none' }]}>
             <Pressable
               onPress={handleInsertCoin}
               style={[s.menuBtn, coins === 0 && !isSubscribed && s.menuBtnNoCoins]}
@@ -919,7 +918,7 @@ export default function PongGame() {
 
       {/* Centred score HUD — same row as GIVE UP button */}
       {phase === 'playing' && g && (
-        <View style={s.scoreHud} pointerEvents="none">
+        <View style={[s.scoreHud, { pointerEvents: 'none' }]}>
           <View style={s.scoreHudRow}>
             <View style={s.hudBlock}>
               <Text style={[s.hudLabel, { fontFamily: MONO }]}>SCORE</Text>
@@ -984,11 +983,9 @@ const s = StyleSheet.create({
 
   titleText: {
     color: '#FFF', fontSize: 36, fontWeight: '800', letterSpacing: 10,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
   },
   hiLabel: {
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
   controlsInline: {
     marginTop: 2,
@@ -1016,7 +1013,6 @@ const s = StyleSheet.create({
   },
   countdownText: {
     color: '#FFF', fontSize: 84, fontWeight: '900', letterSpacing: 8,
-    textShadowColor: '#FFD700', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24,
   },
 
   gameOverOverlay: {

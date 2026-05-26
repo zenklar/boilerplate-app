@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,8 +55,8 @@ function Sparkle({ delay, left, top, size, color = '#FFE066', icon = 'sparkles' 
     const anim = Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
-        Animated.timing(v, { toValue: 1, duration: 1800, useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: 1800, useNativeDriver: true }),
+        Animated.timing(v, { toValue: 1, duration: 1800, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(v, { toValue: 0, duration: 1800, useNativeDriver: Platform.OS !== 'web' }),
       ]),
     );
     anim.start();
@@ -67,10 +67,10 @@ function Sparkle({ delay, left, top, size, color = '#FFE066', icon = 'sparkles' 
   const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [0, -14] });
   return (
     <Animated.View
-      pointerEvents="none"
       style={{
         position: 'absolute',
         left, top,
+        pointerEvents: 'none',
         opacity,
         transform: [{ scale }, { translateY }],
       }}
@@ -98,26 +98,26 @@ function SubscriptionTile() {
       pulse.setValue(0); hue.setValue(0); dotPulse.setValue(0);
       return;
     }
-    const shimAnim = Animated.loop(Animated.timing(shimmer, { toValue: 1, duration: 2600, useNativeDriver: true }));
+    const shimAnim = Animated.loop(Animated.timing(shimmer, { toValue: 1, duration: 2600, useNativeDriver: Platform.OS !== 'web' }));
     const shim2Anim = Animated.loop(
       Animated.sequence([
         Animated.delay(900),
-        Animated.timing(shimmer2, { toValue: 1, duration: 2200, useNativeDriver: true }),
-        Animated.timing(shimmer2, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.timing(shimmer2, { toValue: 1, duration: 2200, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(shimmer2, { toValue: 0, duration: 0, useNativeDriver: Platform.OS !== 'web' }),
       ]),
     );
     const glowAnim = Animated.loop(Animated.sequence([
-      Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: true }),
-      Animated.timing(glow, { toValue: 0, duration: 1400, useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(glow, { toValue: 0, duration: 1400, useNativeDriver: Platform.OS !== 'web' }),
     ]));
     const pulseAnim = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1800, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 1800, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 1800, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(pulse, { toValue: 0, duration: 1800, useNativeDriver: Platform.OS !== 'web' }),
     ]));
     const hueAnim = Animated.loop(Animated.timing(hue, { toValue: 1, duration: 4200, useNativeDriver: false }));
     const dotAnim = Animated.loop(Animated.sequence([
-      Animated.timing(dotPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.timing(dotPulse, { toValue: 0, duration: 700, useNativeDriver: true }),
+      Animated.timing(dotPulse, { toValue: 1, duration: 700, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(dotPulse, { toValue: 0, duration: 700, useNativeDriver: Platform.OS !== 'web' }),
     ]));
     shimAnim.start(); shim2Anim.start(); glowAnim.start();
     pulseAnim.start(); hueAnim.start(); dotAnim.start();
@@ -142,7 +142,7 @@ function SubscriptionTile() {
     <View style={st.subCardOuter}>
       {/* Outer animated glow halo */}
       {isSubscribed && (
-        <Animated.View pointerEvents="none" style={[st.haloWrap, { opacity: glowOpacity }]}>
+        <Animated.View style={[st.haloWrap, { opacity: glowOpacity }, { pointerEvents: 'none' }]}> 
           <LinearGradient
             colors={['rgba(255,215,0,0.0)', 'rgba(255,215,0,0.65)', 'rgba(255,170,40,0.6)', 'rgba(255,215,0,0.0)']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -161,7 +161,7 @@ function SubscriptionTile() {
         />
 
         {/* Sharp angular accents — both states */}
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
           <View style={[st.angleShape, st.angleA]}>
             <LinearGradient
               colors={isSubscribed
@@ -193,7 +193,7 @@ function SubscriptionTile() {
 
         {/* Diagonal grid scanlines for arcade feel */}
         {isSubscribed && (
-          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
             {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
               <View key={i} style={[st.scanLine, { top: i * 22 }]} />
             ))}
@@ -206,13 +206,12 @@ function SubscriptionTile() {
             ? ['rgba(255,215,0,0.22)', 'transparent', 'rgba(255,170,40,0.22)']
             : ['transparent', 'rgba(192,80,255,0.10)', 'transparent']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
         />
 
         {/* Primary shimmer beam */}
         {isSubscribed && (
-          <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }, { skewX: '-20deg' }] }]} pointerEvents="none">
+          <Animated.View style={[st.shimmer, { transform: [{ translateX: shimTranslate }, { skewX: '-20deg' }] }, { pointerEvents: 'none' }]}>
             <LinearGradient
               colors={['transparent', 'rgba(255,225,120,0.45)', 'rgba(255,255,235,0.7)', 'rgba(255,225,120,0.45)', 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -223,7 +222,7 @@ function SubscriptionTile() {
 
         {/* Secondary thinner shimmer beam */}
         {isSubscribed && (
-          <Animated.View style={[st.shimmer2, { transform: [{ translateX: shim2Translate }, { skewX: '-20deg' }] }]} pointerEvents="none">
+          <Animated.View style={[st.shimmer2, { transform: [{ translateX: shim2Translate }, { skewX: '-20deg' }] }, { pointerEvents: 'none' }]}>
             <LinearGradient
               colors={['transparent', 'rgba(255,180,40,0.55)', 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -261,7 +260,7 @@ function SubscriptionTile() {
 
         {/* Animated color-shifting border */}
         {isSubscribed && (
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: glowOpacity }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: glowOpacity }, { pointerEvents: 'none' }]}> 
             <Animated.View style={[StyleSheet.absoluteFill, st.glowBorder, { borderColor }]} />
           </Animated.View>
         )}
@@ -494,10 +493,7 @@ const st = StyleSheet.create({
   },
   subCardActive: {
     borderColor: 'rgba(255, 215, 0, 0.8)',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.65,
-    shadowRadius: 16,
+    boxShadow: '0px 0px 16px rgba(255, 215, 0, 0.65)',
     elevation: 12,
   },
   scanLine: {
@@ -549,10 +545,7 @@ const st = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 11,
     borderWidth: 1, borderColor: '#FFD700',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 6,
+    boxShadow: '0px 0px 6px rgba(255, 215, 0, 0.9)',
     elevation: 6,
   },
   activeDotWrap: { width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
@@ -567,9 +560,6 @@ const st = StyleSheet.create({
   subTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: 0.3 },
   subTitleActive: {
     color: '#FFF6D1',
-    textShadowColor: 'rgba(255, 215, 0, 0.95)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
   },
   subSubtitle: { color: '#B89DD4', fontSize: 13, marginBottom: 14 },
 
@@ -583,10 +573,7 @@ const st = StyleSheet.create({
   },
   heroBannerActive: {
     borderColor: 'rgba(255,215,0,0.85)',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
+    boxShadow: '0px 0px 10px rgba(255, 215, 0, 0.7)',
     elevation: 6,
   },
   heroCoinWrap: { position: 'relative', width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -605,17 +592,11 @@ const st = StyleSheet.create({
   },
   heroInfinityActive: {
     color: '#FFD700',
-    textShadowColor: 'rgba(255,215,0,0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
   },
   heroTextWrap: { flex: 1 },
   heroTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
   heroTitleActive: {
     color: '#FFF6D1',
-    textShadowColor: 'rgba(255,215,0,0.85)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   heroSubtitle: { color: '#E9D5FF', fontSize: 11, marginTop: 2 },
   perksWrap: { gap: 8, marginBottom: 20 },

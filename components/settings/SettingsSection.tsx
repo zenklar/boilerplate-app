@@ -11,10 +11,7 @@ export default function SettingsSection({ title, children }: Props) {
 
   const cardShadow = theme.mode === 'light'
     ? {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.07,
-        shadowRadius: 4,
+        boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.07)',
         elevation: 2,
       }
     : {};

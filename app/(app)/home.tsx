@@ -29,10 +29,7 @@ function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
         st.tile,
         { width: tileW, borderRadius: theme.radius.md, borderColor: theme.colors.cardBorder },
         theme.mode === 'light' && {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 6,
+          boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.1)',
           elevation: 3,
         },
       ]}

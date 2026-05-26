@@ -19,7 +19,9 @@ interface Props {
   onGoToShop?: () => void;
 }
 
-if (Platform.OS === 'android') {
+const isFabric = !!(globalThis as any).nativeFabricUIManager;
+
+if (Platform.OS === 'android' && !isFabric) {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 

@@ -635,10 +635,10 @@ export default function TetrisGame() {
     if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
     else playCountdownGo();
     Animated.parallel([
-      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
+      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
       Animated.sequence([
         Animated.delay(n > 0 ? 550 : 400),
-        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
       ]),
     ]).start(({ finished }) => {
       if (!finished) return;
@@ -656,12 +656,12 @@ export default function TetrisGame() {
     setPhase('coinanim');
     playCoinInsert();
     Animated.parallel([
-      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
-      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),
+      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: Platform.OS !== 'web' }),
     ]).start(() => {
       Animated.sequence([
-        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: true }),
-        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: true }),
+        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: Platform.OS !== 'web' }),
       ]).start(() => {
         setPhase('countdown');
         runCountdown(3);
@@ -888,13 +888,13 @@ export default function TetrisGame() {
       {/* ── Title / idle overlay (sits over the autoplay demo) ── */}
       {(phase === 'idle' || phase === 'demo') && (
         <>
-          <View style={s.overlayTop} pointerEvents="box-none">
+          <View style={[s.overlayTop, { pointerEvents: 'box-none' }]}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>TETRIS</Text>
             <Text style={[s.hiLabel, { fontFamily: MONO }]}>
               HIGH SCORE   {highScore}
             </Text>
           </View>
-          <View style={s.overlayBottom} pointerEvents="box-none">
+          <View style={[s.overlayBottom, { pointerEvents: 'box-none' }]}>
             <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
               <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
@@ -923,7 +923,7 @@ export default function TetrisGame() {
 
       {/* Coin insert animation */}
       {phase === 'coinanim' && (
-        <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+        <View style={[s.insertOverlay, { width: area.w, height: area.h }, { pointerEvents: 'none' }]}>
           <Animated.View
             style={[
               s.fallingCoin,
@@ -941,7 +941,7 @@ export default function TetrisGame() {
 
       {/* Countdown */}
       {phase === 'countdown' && (
-        <View style={[s.countdownOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+        <View style={[s.countdownOverlay, { width: area.w, height: area.h }, { pointerEvents: 'none' }]}>
           <Animated.Text
             style={[
               s.countdownText,
@@ -1043,11 +1043,9 @@ const s = StyleSheet.create({
   },
   titleText: {
     color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
   },
   hiLabel: {
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
   controlsInline: {
     marginTop: 2,
@@ -1074,7 +1072,6 @@ const s = StyleSheet.create({
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
-    textShadowColor: '#FFD700', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 24,
   },
 
   gameOverOverlay: {

@@ -929,10 +929,10 @@ export default function AsteroidsGame() {
     if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
     else playCountdownGo();
     Animated.parallel([
-      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
+      Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
       Animated.sequence([
         Animated.delay(n > 0 ? 550 : 400),
-        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(cdOpacity, { toValue: 0, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
       ]),
     ]).start(({ finished }) => {
       if (!finished) return;
@@ -971,13 +971,13 @@ export default function AsteroidsGame() {
     playCoinInsert();
 
     Animated.parallel([
-      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
-      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),
+      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: Platform.OS !== 'web' }),
     ]).start(() => {
       // Coin "inserts" — quick punch then vanish
       Animated.sequence([
-        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: true }),
-        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: true }),
+        Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: Platform.OS !== 'web' }),
       ]).start(() => {
         setInsertPhase('countdown');
         // Start the ship fly-in NOW so it arrives at center as "GO" fires.
@@ -1185,7 +1185,7 @@ export default function AsteroidsGame() {
         {/* Game objects. Hidden entirely during game-over so the overlay is
             the only thing on screen. */}
         <View style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
         ]}>
         {g?.phase !== 'gameover' && <>
 
@@ -1202,8 +1202,8 @@ export default function AsteroidsGame() {
                 width: d,
                 height: d,
                 transform: [{ rotate: `${a.rot}deg` }],
+                pointerEvents: 'none',
               }}
-              pointerEvents="none"
             >
               <AsteroidShape d={d} pts={a.pts} />
             </View>
@@ -1236,8 +1236,8 @@ export default function AsteroidsGame() {
                 top: e.y - ENEMY_SPRITE / 2,
                 width: ENEMY_SPRITE,
                 height: ENEMY_SPRITE,
+                pointerEvents: 'none',
               }}
-              pointerEvents="none"
             >
               {/* Deflection shield ring — pops briefly when an asteroid bounces */}
               {e.shieldFlash > 0 && (
@@ -1343,10 +1343,22 @@ export default function AsteroidsGame() {
         {/* ── HUD (score + high score + lives) — hidden during gameover */}
         {g && g.phase !== 'demo' && g.phase !== 'gameover' && (
           <>
-            <View style={s.hud}>
-              <Text style={[s.hudScore, { fontFamily: MONO }]}>
-                {String(g.score).padStart(5, '0')}
-              </Text>
+            <View style={[
+              s.hud,
+              Platform.OS !== 'web' && isPlaying && s.hudWithGiveUpSpace,
+            ]}>
+              <View style={s.hudScoreWrap}>
+                <Text style={[s.hudScoreLabel, { fontFamily: MONO }]}>SCORE</Text>
+                <Text style={[s.hudScore, { fontFamily: MONO }]}>
+                  {String(g.score).padStart(5, '0')}
+                </Text>
+              </View>
+              {isPlaying && (
+                <View style={s.hudLevelWrap}>
+                  <Text style={[s.hudLevelLabel, { fontFamily: MONO }]}>LEVEL</Text>
+                  <Text style={[s.hudLevel, { fontFamily: MONO }]}>LV {g.level}</Text>
+                </View>
+              )}
             </View>
             {isPlaying && (
               <View style={s.livesRow}>
@@ -1354,9 +1366,6 @@ export default function AsteroidsGame() {
                   <Text key={i} style={s.lifeIcon}>♥</Text>
                 ))}
               </View>
-            )}
-            {isPlaying && (
-              <Text style={[s.levelBadge, { fontFamily: MONO }]}>LV {g.level}</Text>
             )}
           </>
         )}
@@ -1383,7 +1392,7 @@ export default function AsteroidsGame() {
 
         {/* ── Coin insert animation overlay ── */}
         {insertPhase === 'coinanim' && (
-          <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+          <View style={[s.insertOverlay, { width: area.w, height: area.h }, { pointerEvents: 'none' }]}>
             <Animated.View
               style={[
                 s.fallingCoin,
@@ -1481,32 +1490,31 @@ export default function AsteroidsGame() {
               }]} />
             </View>
 
-            {/* MOVE + FIRE buttons stacked on the right */}
-            <View style={s.rightBtns}>
-              {/* Move / thrust button */}
-              <Pressable
-                style={({ pressed }: { pressed: boolean }) => [
-                  s.moveBtn,
-                  pressed && s.moveBtnActive,
-                ]}
-                onPressIn={() => { ctrl.current.thrust = true; }}
-                onPressOut={() => { ctrl.current.thrust = false; }}
-              >
-                <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>MOVE</Text>
-              </Pressable>
+            {/* MOVE button */}
+            <Pressable
+              style={({ pressed }: { pressed: boolean }) => [
+                s.moveBtn,
+                s.moveBtnPos,
+                pressed && s.moveBtnActive,
+              ]}
+              onPressIn={() => { ctrl.current.thrust = true; }}
+              onPressOut={() => { ctrl.current.thrust = false; }}
+            >
+              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>MOVE</Text>
+            </Pressable>
 
-              {/* Fire button */}
-              <Pressable
-                style={({ pressed }: { pressed: boolean }) => [
-                  s.fireBtn,
-                  pressed && s.fireBtnActive,
-                ]}
-                onPressIn={() => { ctrl.current.fire = true; }}
-                onPressOut={() => { ctrl.current.fire = false; }}
-              >
-                <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
-              </Pressable>
-            </View>
+            {/* Fire button */}
+            <Pressable
+              style={({ pressed }: { pressed: boolean }) => [
+                s.fireBtn,
+                s.fireBtnPos,
+                pressed && s.fireBtnActive,
+              ]}
+              onPressIn={() => { ctrl.current.fire = true; }}
+              onPressOut={() => { ctrl.current.fire = false; }}
+            >
+              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -1516,13 +1524,13 @@ export default function AsteroidsGame() {
             above the boxed preview and INSERT COIN can sit below it. ── */}
       {isDemoLayout && (
         <>
-          <View style={s.overlayTop} pointerEvents="box-none">
+          <View style={[s.overlayTop, { pointerEvents: 'box-none' }]}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
             <Text style={[s.hiLabel, { fontFamily: MONO }]}>
               HIGH SCORE   {highScore}
             </Text>
           </View>
-          <View style={s.overlayBottom} pointerEvents="box-none">
+          <View style={[s.overlayBottom, { pointerEvents: 'box-none' }]}>
             <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
               <Text style={[s.menuBtnTxt, { fontFamily: MONO }]}>
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
@@ -1571,8 +1579,7 @@ const s = StyleSheet.create({
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#7FE3FF',
     ...(Platform.OS === 'android' ? {} : {
-      shadowColor: '#7FE3FF', shadowOpacity: 1, shadowRadius: 6,
-      shadowOffset: { width: 0, height: 0 },
+      boxShadow: '0px 0px 6px rgba(127, 227, 255, 1)',
     }),
   },
   enemyBullet: {
@@ -1580,28 +1587,34 @@ const s = StyleSheet.create({
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#FF3030',
     ...(Platform.OS === 'android' ? {} : {
-      shadowColor: '#FF0000', shadowOpacity: 1, shadowRadius: 6,
-      shadowOffset: { width: 0, height: 0 },
+      boxShadow: '0px 0px 6px rgba(255, 0, 0, 1)',
     }),
   },
 
   hud: {
     position: 'absolute', top: 14, left: 14, right: 14,
-    flexDirection: 'row', justifyContent: 'space-between',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
   },
-  hudScore: { color: '#FFF', fontSize: 20, fontWeight: '700' },
-  hudHi: { color: '#888', fontSize: 13 },
+  // Keep LEVEL clear of the top-right GIVE UP button on mobile gameplay.
+  hudWithGiveUpSpace: {
+    right: 120,
+  },
+  hudScoreWrap: { alignItems: 'flex-start' },
+  hudScoreLabel: { color: '#888', fontSize: 10, letterSpacing: 2, fontWeight: '700' },
+  hudScore: { color: '#FFF', fontSize: 20, fontWeight: '800', letterSpacing: 1 },
+  hudLevelWrap: { alignItems: 'flex-end' },
+  hudLevelLabel: { color: '#888', fontSize: 10, letterSpacing: 2, fontWeight: '700' },
+  hudLevel: { color: '#777', fontSize: 13, fontWeight: '700' },
   livesRow: {
-    position: 'absolute', top: 44, left: 14,
+    position: 'absolute', top: 64, left: 14,
     flexDirection: 'row', gap: 5,
   },
   lifeIcon: {
     color: '#FF2A3C', fontSize: 18,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3,
   },
   levelBadge: {
     position: 'absolute',
-    bottom: CTRL_H + 10,
+    top: 14,
     right: 14,
     color: '#777', fontSize: 12,
   },
@@ -1636,12 +1649,10 @@ const s = StyleSheet.create({
 
   titleText: {
     color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
   },
   yearText: { color: '#888', fontSize: 14, letterSpacing: 2 },
   hiLabel: {
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
   finalScore: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 6 },
   newHsText: { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },
@@ -1710,9 +1721,6 @@ const s = StyleSheet.create({
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
-    textShadowColor: '#FFD700',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 24,
   },
 
   /* Controls overlay */
@@ -1720,11 +1728,16 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CTRL_H,
     flexDirection: 'row', alignItems: 'center',
-    paddingBottom: 24,
   },
 
   /* Joystick */
-  joyArea: { flex: 1, height: CTRL_H },
+  joyArea: {
+    position: 'absolute',
+    left: '5%',
+    bottom: '50%',
+    width: 220,
+    height: CTRL_H,
+  },
   joyBase: {
     position: 'absolute',
     width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
@@ -1740,31 +1753,40 @@ const s = StyleSheet.create({
 
   /* Fire button */
   rightBtns: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    marginRight: 30,
+    position: 'absolute',
+    pointerEvents: 'none',
   },
   moveBtn: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 60, height: 60, borderRadius: 30,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
     backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center', alignItems: 'center',
+  },
+  moveBtnPos: {
+    position: 'absolute',
+    right: '13%',
+    top: '0%',
+    pointerEvents: 'auto',
   },
   moveBtnActive: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     borderColor: 'rgba(255,255,255,0.8)',
   },
   fireBtn: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 60, height: 60, borderRadius: 30,
     borderWidth: 2, borderColor: '#8B0000',
     backgroundColor: 'rgba(139,0,0,0.2)',
     justifyContent: 'center', alignItems: 'center',
+  },
+  fireBtnPos: {
+    position: 'absolute',
+    right: '20%',
+    top: '-60%',
+    pointerEvents: 'auto',
   },
   fireBtnActive: {
     backgroundColor: 'rgba(220,0,0,0.5)',
     borderColor: '#FF3333',
   },
-  fireBtnTxt: { color: '#FFF', fontSize: 13, fontWeight: '700', letterSpacing: 2 },
+  fireBtnTxt: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
 });

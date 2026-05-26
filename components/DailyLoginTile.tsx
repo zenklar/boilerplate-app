@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Animated, Modal, useWindowDimensions, Image,
+  Animated, Modal, Platform, useWindowDimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
@@ -45,13 +45,13 @@ function Sparkle({ top, bottom, left, right, delay, size = 9 }: SparkleProps) {
       Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(scale, { toValue: 1.15, duration: 350, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 1, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(scale, { toValue: 1.15, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
         ]),
         Animated.delay(250),
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
-          Animated.timing(scale, { toValue: 0.4, duration: 350, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(scale, { toValue: 0.4, duration: 350, useNativeDriver: Platform.OS !== 'web' }),
         ]),
         Animated.delay(600),
       ])
@@ -151,12 +151,12 @@ export default function DailyLoginTile() {
         Animated.sequence([
           Animated.delay(i * 55),
           Animated.parallel([
-            Animated.timing(anim.x, { toValue: toX, duration: 500, useNativeDriver: true }),
-            Animated.timing(anim.y, { toValue: toY, duration: 500, useNativeDriver: true }),
-            Animated.timing(anim.scale, { toValue: 0.35, duration: 500, useNativeDriver: true }),
+            Animated.timing(anim.x, { toValue: toX, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
+            Animated.timing(anim.y, { toValue: toY, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
+            Animated.timing(anim.scale, { toValue: 0.35, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
             Animated.sequence([
               Animated.delay(280),
-              Animated.timing(anim.opacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+              Animated.timing(anim.opacity, { toValue: 0, duration: 220, useNativeDriver: Platform.OS !== 'web' }),
             ]),
           ]),
         ])
@@ -308,9 +308,9 @@ export default function DailyLoginTile() {
         {coinAnims.map((anim, i) => (
           <Animated.View
             key={i}
-            pointerEvents="none"
             style={[
               st.flyingCoin,
+              { pointerEvents: 'none' },
               {
                 opacity: anim.opacity,
                 transform: [
@@ -384,10 +384,7 @@ const st = StyleSheet.create({
     position: 'relative',
   },
   dayTileActive: {
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
+    boxShadow: '0px 0px 10px rgba(255, 215, 0, 0.6)',
     elevation: 5,
   },
   dayLabel: {
