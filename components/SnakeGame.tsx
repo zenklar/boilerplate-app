@@ -8,6 +8,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
+import GameControlsInfo from './game/GameControlsInfo';
 import {
   playShoot, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed,
 } from '../utils/sounds';
@@ -521,11 +522,18 @@ export default function SnakeGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-              {Platform.OS === 'web'
-                ? 'Arrow Keys  ·  WASD  to steer'
-                : 'Tap arrows to steer'}
-            </Text>
+            <View style={s.controlsInline}>
+              <GameControlsInfo
+                gameTitle="SNAKE"
+                mobileControls={[
+                  { keyText: 'ON-SCREEN ARROWS', actionText: 'Tap to change direction.' },
+                ]}
+                webControls={[
+                  { keyText: 'ARROW KEYS', actionText: 'Steer the snake.' },
+                  { keyText: 'WASD', actionText: 'Alternative steering keys.' },
+                ]}
+              />
+            </View>
           </View>
         </>
       )}
@@ -659,9 +667,8 @@ const s = StyleSheet.create({
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
     textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
-  webIdleHint: {
-    color: '#888', fontSize: 11, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 4,
+  controlsInline: {
+    marginTop: 2,
   },
   menuBtn: {
     borderWidth: 1.5, borderColor: '#B8860B',

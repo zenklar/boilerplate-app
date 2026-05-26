@@ -9,6 +9,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
+import GameControlsInfo from './game/GameControlsInfo';
 import {
   playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed, playShoot,
 } from '../utils/sounds';
@@ -17,7 +18,7 @@ import {
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
 const CTRL_H = Platform.OS === 'web' ? 0 : 0;    // boost button removed; slider space handled by SLIDER_H
-const SLIDER_H = Platform.OS === 'web' ? 0 : 56;  // mobile slider control height
+const SLIDER_H = Platform.OS === 'web' ? 0 : 68;  // mobile slider control height
 
 const FRAME_RATIO = 0.62;          // w / h — vertical playfield
 const PADDLE_W_FRAC = 0.22;        // paddle width as fraction of frame width
@@ -47,6 +48,7 @@ const BOOST_MULT = 1.10;
 const BOOST_ACTIVE_TICKS   = 14;   // ~0.22s window
 const BOOST_COOLDOWN_TICKS = 80;   // ~1.3s
 const CPU_BOOST_CHANCE_PER_TICK = 0.06; // when ball is in striking range
+const BOOST_BOUNCE_PX = 18;
 
 // Electricity — border glow that fires randomly for 3 s, then cools down.
 // While active, bouncing off any wall adds 20 % speed.
@@ -98,6 +100,17 @@ function applyWallBoost(ball: Ball) {
   const speed = Math.min(MAX_SPEED, cur * ELECTRICITY_WALL_BOOST);
   ball.vx = (ball.vx / cur) * speed;
   ball.vy = (ball.vy / cur) * speed;
+}
+
+/**
+ * Convert remaining player boost ticks into a quick up-and-down paddle lift.
+ * The paddle rises rapidly, then falls back during the same boost window.
+ */
+function playerBoostLiftFromTicks(ticksLeft: number) {
+  if (ticksLeft <= 0) return 0;
+  const p = 1 - Math.min(1, ticksLeft / BOOST_ACTIVE_TICKS); // 0 -> 1 over boost window
+  if (p < 0.35) return (p / 0.35) * BOOST_BOUNCE_PX;
+  return Math.max(0, (1 - (p - 0.35) / 0.65) * BOOST_BOUNCE_PX);
 }
 
 function serve(g: GS, frameW: number, frameH: number, dir: 1 | -1) {
@@ -159,6 +172,7 @@ export default function PongGame() {
   const targetXRef      = useRef<number | null>(null);
   // Paddle x captured at the moment a touch starts (delta-drag anchor)
   const paddleAtGrantRef = useRef<number>(0);
+  const lastSliderTapRef = useRef<number>(0);
   // Stable ref for current phase (used inside stable event listeners)
   const phaseRef    = useRef<Phase>(phase);
   phaseRef.current  = phase;
@@ -238,7 +252,7 @@ export default function PongGame() {
   // Touch drag (mobile + web) — delta-based so coordinate system of the
   // touched view (thumb vs track) never matters; paddle moves by the
   // distance the finger has travelled since touch-start.
-  // A minimal-movement release (tap) triggers boost.
+  // A minimal-movement double tap triggers boost.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -251,9 +265,15 @@ export default function PongGame() {
         targetXRef.current = paddleAtGrantRef.current + gs.dx;
       },
       onPanResponderRelease: (_e, gs) => {
-        // Tap (minimal movement) → boost; drag → just release
+        // Double-tap (minimal movement) -> boost; drag -> just release
         if (Math.abs(gs.dx) < 8 && Math.abs(gs.dy) < 8) {
-          triggerBoostRef.current();
+          const now = Date.now();
+          if (now - lastSliderTapRef.current <= 280) {
+            triggerBoostRef.current();
+            lastSliderTapRef.current = 0;
+          } else {
+            lastSliderTapRef.current = now;
+          }
         }
         targetXRef.current = null;
       },
@@ -355,8 +375,10 @@ export default function PongGame() {
             if (g.electricity.active) applyWallBoost(ball);
           }
 
-          // Paddle collision — player (bottom)
-          const playerY = frame.h - PADDLE_MARGIN;
+          // Paddle collision — player (bottom). Boost now physically lifts
+          // the paddle, so timing the double tap changes the hit window.
+          const playerLift = playerBoostLiftFromTicks(g.playerBoostActive);
+          const playerY = frame.h - PADDLE_MARGIN - playerLift;
           if (ball.vy > 0 && ball.y + halfB >= playerY &&
               ball.y + halfB <= playerY + PADDLE_H + Math.abs(ball.vy)) {
             if (Math.abs(ball.x - g.playerX) <= halfP + halfB) {
@@ -668,7 +690,8 @@ export default function PongGame() {
   const playerBoostReady  = !!g && g.playerBoostCD === 0 && g.playerBoostActive === 0;
   const playerBoostActive = !!g && g.playerBoostActive > 0;
   const cpuBoostActive    = !!g && g.cpuBoostActive > 0;
-  const playerColor = playerBoostActive ? '#FFFFFF' : (playerBoostReady ? '#FFD700' : '#7A5A00');
+  const playerBoostLift = g ? playerBoostLiftFromTicks(g.playerBoostActive) : 0;
+  const playerColor = playerBoostReady ? '#FFD700' : '#7A5A00';
   const cpuColor    = cpuBoostActive    ? '#FFFF44' : '#FFFFFF';
 
   return (
@@ -717,26 +740,17 @@ export default function PongGame() {
           )}
 
           {/* Player paddle (bottom) */}
-          {showField && playerBoostActive && (
-            <View pointerEvents="none" style={{
-              position: 'absolute',
-              left: g!.playerX - paddleW / 2 - 10,
-              top: frameH - PADDLE_MARGIN - PADDLE_H - 8,
-              width: paddleW + 20, height: PADDLE_H + 16,
-              backgroundColor: 'rgba(255, 200, 0, 0.32)',
-              borderRadius: 4,
-            }} />
-          )}
           {showField && (
             <View style={{
               position: 'absolute',
-              left: g!.playerX - paddleW / 2, top: frameH - PADDLE_MARGIN - PADDLE_H,
+              left: g!.playerX - paddleW / 2,
+              top: frameH - PADDLE_MARGIN - PADDLE_H - playerBoostLift,
               width: paddleW, height: PADDLE_H,
               backgroundColor: playerColor,
-              shadowColor: playerBoostActive ? '#FFD700' : (playerBoostReady ? '#FFD700' : 'transparent'),
+              shadowColor: playerBoostReady ? '#FFD700' : 'transparent',
               shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: playerBoostActive ? 1 : (playerBoostReady ? 0.4 : 0),
-              shadowRadius: playerBoostActive ? 24 : (playerBoostReady ? 6 : 0),
+              shadowOpacity: playerBoostReady ? 0.35 : 0,
+              shadowRadius: playerBoostReady ? 6 : 0,
             }} />
           )}
 
@@ -751,29 +765,6 @@ export default function PongGame() {
             }} />
           ))}
 
-          {/* Match wins dots — centred on the mid-line */}
-          {showField && (
-            <View pointerEvents="none" style={{
-              position: 'absolute', top: frameH / 2 - 7,
-              left: 0, right: 0,
-              flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
-            }}>
-              {[0, 1, 2].map(i => (
-                <View key={`mp${i}`} style={{
-                  width: 7, height: 7, borderRadius: 4,
-                  backgroundColor: i < g!.matchPlayerWins ? '#FFD700' : '#2A2A2A',
-                }} />
-              ))}
-              <View style={{ width: 14 }} />
-              {[0, 1, 2].map(i => (
-                <View key={`mc${i}`} style={{
-                  width: 7, height: 7, borderRadius: 4,
-                  backgroundColor: i < g!.matchCpuWins ? '#FFF' : '#2A2A2A',
-                }} />
-              ))}
-            </View>
-          )}
-
         </View>
         )}
 
@@ -784,13 +775,13 @@ export default function PongGame() {
             style={[s.sliderBar, { width: frameW, marginTop: 8 }]}
             {...(phase === 'playing' ? panResponder.panHandlers : {})}
           >
+            <Text style={[s.sliderHintTop, { fontFamily: MONO }]} pointerEvents="none">
+              TOUCH TO MOVE
+            </Text>
             <View style={s.sliderTrack} />
-            {phase === 'playing' && g && (
-              <View style={[s.sliderThumb, {
-                left: g.playerX - 22,
-                backgroundColor: playerColor,
-              }]} />
-            )}
+            <Text style={[s.sliderHintBottom, { fontFamily: MONO }]} pointerEvents="none">
+              DOUBLE TAP TO BOUNCE
+            </Text>
           </View>
         )}
       </View>
@@ -846,7 +837,7 @@ export default function PongGame() {
             </>
           ) : (
             <Text style={[s.hiLabel, { fontFamily: MONO, color: '#888', marginTop: 4 }]}>
-              SCORE NOT SAVED
+              WIN TO REGISTER A VALID SCORE!
             </Text>
           )}
           <View style={s.btnRow}>
@@ -883,11 +874,19 @@ export default function PongGame() {
                 {(coins > 0 || isSubscribed) ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            <Text style={[s.hint, { fontFamily: MONO }]}>
-              {Platform.OS === 'web'
-                ? 'Mouse to move  ·  Click to BOOST'
-                : 'Drag button to move  ·  Tap to BOOST'}
-            </Text>
+            <View style={s.controlsInline}>
+              <GameControlsInfo
+                gameTitle="PONG"
+                mobileControls={[
+                  { keyText: 'TOUCH + DRAG', actionText: 'Move your paddle left and right.' },
+                  { keyText: 'DOUBLE TAP', actionText: 'Trigger a BOOST smash.' },
+                ]}
+                webControls={[
+                  { keyText: 'MOUSE MOVE', actionText: 'Move your paddle.' },
+                  { keyText: 'CLICK / SHIFT / W', actionText: 'Trigger a BOOST smash.' },
+                ]}
+              />
+            </View>
           </View>
         </>
       )}
@@ -910,8 +909,34 @@ export default function PongGame() {
       {/* Centred score HUD — same row as GIVE UP button */}
       {phase === 'playing' && g && (
         <View style={s.scoreHud} pointerEvents="none">
-          <Text style={[s.hudLabel, { fontFamily: MONO }]}>SCORE</Text>
-          <Text style={[s.hudValue, { fontFamily: MONO }]}>{g.sessionScore}</Text>
+          <View style={s.scoreHudRow}>
+            <View style={s.hudBlock}>
+              <Text style={[s.hudLabel, { fontFamily: MONO }]}>SCORE</Text>
+              <View style={s.hudValueSlot}>
+                <Text style={[s.hudValue, { fontFamily: MONO }]}>{g.sessionScore}</Text>
+              </View>
+            </View>
+            <View style={s.hudBlock}>
+              <Text style={[s.hudLabel, { fontFamily: MONO }]}>ROUND WINS</Text>
+              <View style={s.hudValueSlot}>
+                <View style={s.roundWinsRow}>
+                  {[0, 1, 2].map(i => (
+                  <View key={`hud-mp${i}`} style={[
+                    s.roundDot,
+                    { backgroundColor: i < g.matchPlayerWins ? '#FFD700' : '#2A2A2A' },
+                  ]} />
+                  ))}
+                  <View style={{ width: 16 }} />
+                  {[0, 1, 2].map(i => (
+                  <View key={`hud-mc${i}`} style={[
+                    s.roundDot,
+                    { backgroundColor: i < g.matchCpuWins ? '#FFFFFF' : '#2A2A2A' },
+                  ]} />
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
         </View>
       )}
 
@@ -954,9 +979,8 @@ const s = StyleSheet.create({
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
     textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
-  hint: {
-    color: '#888', fontSize: 11, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 4,
+  controlsInline: {
+    marginTop: 2,
   },
   menuBtn: {
     borderWidth: 1.5, borderColor: '#B8860B',
@@ -1011,25 +1035,48 @@ const s = StyleSheet.create({
     position: 'absolute', top: 10, left: 0, right: 0,
     alignItems: 'center', zIndex: 15,
   },
+  scoreHudRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 30 },
+  hudBlock: { alignItems: 'center' },
   hudLabel: { color: '#7A6000', fontSize: 9, letterSpacing: 3 },
   hudValue: { color: '#FFD700', fontSize: 16, fontWeight: '700', letterSpacing: 2 },
+  hudValueSlot: { height: 22, justifyContent: 'center' },
+  roundWinsRow: { flexDirection: 'row', alignItems: 'center' },
+  roundDot: { width: 10, height: 10, borderRadius: 5, marginHorizontal: 3 },
 
   sliderBar: {
-    height: 56,
+    height: 68,
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#252525',
+    backgroundColor: '#050505',
+    borderRadius: 2,
+    paddingHorizontal: 10,
     overflow: 'visible',
   },
   sliderTrack: {
-    height: 2,
-    backgroundColor: '#2A2A2A',
-    borderRadius: 1,
+    height: 0,
+    borderTopWidth: 2,
+    borderColor: '#333',
+    borderStyle: 'dashed',
   },
-  sliderThumb: {
+  sliderHintTop: {
     position: 'absolute',
-    width: 44,
-    height: 44,
-    top: 6,           // (56 - 44) / 2
-    borderRadius: 22, // full circle
-    backgroundColor: '#FFD700',
+    top: 8,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: '#6C6C6C',
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  sliderHintBottom: {
+    position: 'absolute',
+    bottom: 8,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: '#6C6C6C',
+    fontSize: 10,
+    letterSpacing: 1.5,
   },
 });

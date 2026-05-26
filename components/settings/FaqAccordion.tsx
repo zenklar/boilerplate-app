@@ -53,22 +53,22 @@ const GAME_FAQS = [
   {
     question: 'How do I play Asteroids?',
     answer:
-      'Destroy incoming asteroids and enemy saucers before they destroy you. Each asteroid splits into smaller, faster fragments — clear them all to advance a level.\n\nControls (mobile): Use the floating joystick on the left to rotate and thrust your ship. Tap the FIRE button on the right to shoot.\n\nControls (web): Move your mouse to aim and thrust the ship. Press Space to fire.',
+      'Destroy incoming asteroids and enemy saucers before they destroy you. Each asteroid splits into smaller, faster fragments — clear them all to advance a level.\n\nControls (mobile): Touch joystick to steer. HOLD MOVE to thrust. HOLD FIRE to shoot.\n\nControls (web): Mouse aim. Hold LMB thrust. Space fire. Arrow keys/WASD steer.',
   },
   {
     question: 'How do I play Pong?',
     answer:
-      'Face off against a CPU opponent in a best-of-5 match. Score goals by getting the ball past the CPU\'s paddle. First to win 3 rounds wins the match.\n\nControls (mobile): Drag anywhere on the play field to slide your paddle. Tap the BOOST button below to smash the ball with extra speed.\n\nControls (web): Move your mouse over the play field to control the paddle. Left-click to trigger a BOOST.',
+      'Face off against a CPU opponent in a best-of-5 match. Score goals by getting the ball past the CPU\'s paddle. First to win 3 rounds wins the match.\n\nControls (mobile): Touch + drag to move paddle. Double tap to BOOST.\n\nControls (web): Move mouse to control paddle. Click/Shift/W to BOOST.',
   },
   {
     question: 'How do I play Snake?',
     answer:
-      'Guide your snake to eat the food pellets and grow as long as possible without running into yourself. The snake wraps around walls Nokia-style and speeds up with each level.\n\nControls (mobile): Use the D-pad (▲ ▼ ◀ ▶) at the bottom of the screen to change direction.\n\nControls (web): Press the Arrow keys or WASD to steer.',
+      'Guide your snake to eat the food pellets and grow as long as possible without running into yourself. The snake wraps around walls Nokia-style and speeds up with each level.\n\nControls (mobile): Tap the on-screen arrows to steer.\n\nControls (web): Arrow keys or WASD to steer.',
   },
   {
     question: 'How do I play Tetris?',
     answer:
-      'Stack the falling tetrominoes to complete full horizontal lines, which then clear and score points. The game ends when pieces stack to the top.\n\nControls (mobile): ◀ / ▶ to move left or right, ⟳ to rotate clockwise, ▼ to soft-drop, ⤓ to hard-drop instantly.\n\nControls (web): Move your mouse to slide the piece, click to rotate, press ↓ for soft-drop, Space for hard-drop.',
+      'Stack the falling tetrominoes to complete full horizontal lines, which then clear and score points. The game ends when pieces stack to the top.\n\nControls (mobile): Touch controls: ◀ ▶ move. ⟳ rotate. ▼ soft drop. DOWN hard drop.\n\nControls (web): Mouse move. Click rotate. Arrow keys/WASD move. ↓ soft drop. Space hard drop.',
   },
 ];
 

@@ -8,6 +8,7 @@ import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
+import GameControlsInfo from './game/GameControlsInfo';
 import {
   TETROMINOS, TETROMINO_COLORS, TETROMINO_TYPES,
   TetrominoType, BOARD_W, BOARD_H, LINE_SCORE, DROP_FRAMES_PER_LEVEL,
@@ -865,11 +866,23 @@ export default function TetrisGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-              {Platform.OS === 'web'
-                ? 'Mouse  move · Click  rotate · ↓  soft drop · Space  hard drop'
-                : 'Drag to move · tap to rotate · DROP button to slam'}
-            </Text>
+            <View style={s.controlsInline}>
+              <GameControlsInfo
+                gameTitle="TETRIS"
+                mobileControls={[
+                  { keyText: 'LEFT / RIGHT', actionText: 'Move piece horizontally.' },
+                  { keyText: 'ROTATE', actionText: 'Rotate the active piece.' },
+                  { keyText: 'SOFT DROP', actionText: 'Drop faster while held.' },
+                  { keyText: 'DOWN', actionText: 'Hard drop instantly.' },
+                ]}
+                webControls={[
+                  { keyText: 'MOUSE MOVE', actionText: 'Guide piece horizontally.' },
+                  { keyText: 'CLICK', actionText: 'Rotate the active piece.' },
+                  { keyText: 'ARROWS / WASD', actionText: 'Move and soft drop.' },
+                  { keyText: 'SPACE', actionText: 'Hard drop instantly.' },
+                ]}
+              />
+            </View>
           </View>
         </>
       )}
@@ -1002,9 +1015,8 @@ const s = StyleSheet.create({
     color: '#FFD700', fontSize: 14, letterSpacing: 1,
     textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
   },
-  webIdleHint: {
-    color: '#CCC', fontSize: 11, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
+  controlsInline: {
+    marginTop: 2,
   },
   menuBtn: {
     borderWidth: 1.5, borderColor: '#B8860B',

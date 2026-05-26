@@ -13,6 +13,7 @@ import {
 import { router } from 'expo-router';
 import Svg, { Polygon } from 'react-native-svg';
 import { fitPreview } from './game/previewFrame';
+import GameControlsInfo from './game/GameControlsInfo';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
@@ -1269,11 +1270,24 @@ export default function AsteroidsGame() {
           </>
         )}
 
-        {/* Web: keyboard/mouse hint */}
+        {/* Web: controls info trigger */}
         {Platform.OS === 'web' && isPlaying && (
-          <Text style={s.webHint}>
-            Mouse aim · LMB thrust · Space fire  ·  ← → ↑ keys
-          </Text>
+          <View style={s.controlsFloating}>
+            <GameControlsInfo
+              gameTitle="ASTEROIDS"
+              mobileControls={[
+                { keyText: 'JOYSTICK', actionText: 'Steer the ship.' },
+                { keyText: 'MOVE (HOLD)', actionText: 'Apply thrust while held.' },
+                { keyText: 'FIRE (HOLD)', actionText: 'Continuously fire while held.' },
+              ]}
+              webControls={[
+                { keyText: 'MOUSE', actionText: 'Aim the ship direction.' },
+                { keyText: 'LEFT MOUSE (HOLD)', actionText: 'Apply thrust while held.' },
+                { keyText: 'SPACE', actionText: 'Fire weapons.' },
+                { keyText: 'ARROWS OR WASD', actionText: 'Steer with keyboard input.' },
+              ]}
+            />
+          </View>
         )}
 
         {/* ── Coin insert animation overlay ── */}
@@ -1423,11 +1437,22 @@ export default function AsteroidsGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-              {Platform.OS === 'web'
-                ? 'Mouse aim · LMB thrust · Space to fire'
-                : 'Joystick to fly · tap FIRE to shoot'}
-            </Text>
+            <View style={s.controlsInline}>
+              <GameControlsInfo
+                gameTitle="ASTEROIDS"
+                mobileControls={[
+                  { keyText: 'JOYSTICK', actionText: 'Steer the ship.' },
+                  { keyText: 'MOVE (HOLD)', actionText: 'Apply thrust while held.' },
+                  { keyText: 'FIRE (HOLD)', actionText: 'Continuously fire while held.' },
+                ]}
+                webControls={[
+                  { keyText: 'MOUSE', actionText: 'Aim the ship direction.' },
+                  { keyText: 'LEFT MOUSE (HOLD)', actionText: 'Apply thrust while held.' },
+                  { keyText: 'SPACE', actionText: 'Fire weapons.' },
+                  { keyText: 'ARROWS OR WASD', actionText: 'Steer with keyboard input.' },
+                ]}
+              />
+            </View>
           </View>
         </>
       )}
@@ -1483,13 +1508,12 @@ const s = StyleSheet.create({
     color: '#777', fontSize: 12,
   },
 
-  webHint: {
+  controlsFloating: {
     position: 'absolute', bottom: 10, left: 0, right: 0,
-    color: '#666', fontSize: 11, textAlign: 'center',
+    alignItems: 'center',
   },
-  webIdleHint: {
-    color: '#CCC', fontSize: 12, letterSpacing: 1,
-    textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6,
+  controlsInline: {
+    marginTop: 2,
   },
 
   // Title/idle overlay — transparent so the autoplay demo shows through.
