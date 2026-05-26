@@ -406,7 +406,11 @@ export default function SnakeGame() {
   const cellsOffsetY = Math.floor((boardPxH - cellsH) / 2);
 
   const g         = gsRef.current;
-  const showBoard = !!(g && (phase === 'playing' || phase === 'gameover' || phase === 'demo'));
+  // During game-over, render NOTHING behind the overlay so the game-over
+  // screen is the only thing visible. Web absolute-positioned overlays cover
+  // siblings reliably; Android new-arch sometimes doesn't, hence belt and
+  // braces — skip the board/snake entirely.
+  const showBoard = !!(g && (phase === 'playing' || phase === 'demo'));
 
   /* ── Render ──────────────────────────────────────────────────────────── */
   return (
@@ -441,7 +445,8 @@ export default function SnakeGame() {
           </View>
         )}
 
-        {/* Board */}
+        {/* Board — hidden during gameover so only the overlay shows */}
+        {phase !== 'gameover' && (
         <View style={[s.board, { width: boardPxW, height: boardPxH }]}>
 
           {/* Inner cell-grid wrapper — centred inside the outer preview
@@ -489,6 +494,7 @@ export default function SnakeGame() {
           ))}
           </View>
         </View>
+        )}
       </View>
 
       {/* ── Title / demo overlay ── */}

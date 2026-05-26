@@ -707,6 +707,9 @@ export default function TetrisGame() {
           justifyContent: isDemoLayout ? 'center' : 'flex-start',
         },
       ]}>
+        {/* Board + side panel are hidden during gameover so the overlay is
+            the only thing on screen, matching the web layout. */}
+        {phase !== 'gameover' && (<>
         {/* Board — Pressable so a left click rotates CW */}
         <Pressable
           ref={boardRef as any}
@@ -816,6 +819,7 @@ export default function TetrisGame() {
           </View>
         </View>
         )}
+        </>)}
       </View>
 
       {/* ── Title / idle overlay (sits over the autoplay demo) ── */}

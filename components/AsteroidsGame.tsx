@@ -1075,11 +1075,14 @@ export default function AsteroidsGame() {
         onLayout={onLayout}
       >
 
-        {/* Game objects — scaled down in demo/preview mode so they look proportional in the smaller frame */}
+        {/* Game objects — scaled down in demo/preview mode so they look
+            proportional in the smaller frame. Hidden entirely during
+            game-over so the overlay is the only thing on screen. */}
         <View style={[
           StyleSheet.absoluteFillObject,
           { transform: [{ scale: isDemoLayout ? 0.65 : 1 }] },
         ]}>
+        {g?.phase !== 'gameover' && <>
 
         {/* Asteroids — jagged polygons via react-native-svg (works on web too) */}
         {g?.asteroids.map((a) => {
@@ -1237,11 +1240,12 @@ export default function AsteroidsGame() {
             <ShipPreview ship={selectedShip} size={SHIP_SIZE} />
           </View>
         )}
+        </>}{/* end gameover-skip wrapper */}
 
         </View>{/* end game objects scale wrapper */}
 
-        {/* ── HUD (score + high score + lives) ── */}
-        {g && g.phase !== 'demo' && (
+        {/* ── HUD (score + high score + lives) — hidden during gameover */}
+        {g && g.phase !== 'demo' && g.phase !== 'gameover' && (
           <>
             <View style={s.hud}>
               <Text style={[s.hudScore, { fontFamily: MONO }]}>

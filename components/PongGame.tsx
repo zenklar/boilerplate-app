@@ -580,7 +580,9 @@ export default function PongGame() {
   frameRef.current = { w: frameW, h: frameH };
 
   const g = gsRef.current;
-  const showField = !!(g && (phase === 'playing' || phase === 'demo' || phase === 'gameover'));
+  // Hide the playfield during game-over so the root-level overlay is the
+  // only thing on screen (matches the web layout).
+  const showField = !!(g && (phase === 'playing' || phase === 'demo'));
   const paddleW = Math.max(40, frameW * PADDLE_W_FRAC);
 
   // Centre dashed net
@@ -646,6 +648,7 @@ export default function PongGame() {
   return (
     <View style={s.root} onLayout={onLayout}>
       <View style={s.center}>
+        {phase !== 'gameover' && (
         <View
           ref={frameViewRef}
           style={[s.frame, { width: frameW, height: frameH }]}
@@ -779,6 +782,7 @@ export default function PongGame() {
             </View>
           )}
         </View>
+        )}
       </View>
 
       {/* Game over — root-level overlay so it covers the entire safe area,
