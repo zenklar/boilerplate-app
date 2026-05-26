@@ -1274,7 +1274,7 @@ export default function AsteroidsGame() {
 
         {/* ── Coin insert animation overlay ── */}
         {insertPhase === 'coinanim' && (
-          <View style={s.insertOverlay}>
+          <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
             <Animated.View
               style={[
                 s.fallingCoin,
@@ -1539,8 +1539,8 @@ const s = StyleSheet.create({
 
   // Coin insert animation
   insertOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    pointerEvents: 'none',
+    position: 'absolute', top: 0, left: 0,
+    zIndex: 30,
   },
   fallingCoin: {
     position: 'absolute',

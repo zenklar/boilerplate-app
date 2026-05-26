@@ -848,7 +848,7 @@ export default function TetrisGame() {
 
       {/* Coin insert animation */}
       {phase === 'coinanim' && (
-        <View style={s.insertOverlay} pointerEvents="none">
+        <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
           <Animated.View
             style={[
               s.fallingCoin,
@@ -995,7 +995,7 @@ const s = StyleSheet.create({
   menuBtnNoCoins: { backgroundColor: '#555', borderColor: '#333' },
   menuBtnTxt: { color: '#000', fontSize: 13, letterSpacing: 4, fontWeight: '800' },
 
-  insertOverlay: { ...StyleSheet.absoluteFillObject, pointerEvents: 'none' },
+  insertOverlay: { position: 'absolute', top: 0, left: 0, zIndex: 30 },
   fallingCoin: {
     position: 'absolute', top: 0,
     width: 56, height: 56,

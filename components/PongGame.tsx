@@ -510,15 +510,15 @@ export default function PongGame() {
   }, []);
 
   const runCoinAnimation = useCallback(() => {
-    const f = frameRef.current;
+    const targetY = area.h / 2 - 30;
     coinY.setValue(-60);
     coinScale.setValue(0.5);
     coinOpacity.setValue(1);
     setPhase('coinanim');
     if (Platform.OS === 'web') playCoinInsert();
     Animated.parallel([
-      Animated.timing(coinY,     { toValue: f.h / 2 - 30, duration: 520, useNativeDriver: true }),
-      Animated.timing(coinScale, { toValue: 1.3,           duration: 520, useNativeDriver: true }),
+      Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
+      Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),
     ]).start(() => {
       Animated.sequence([
         Animated.timing(coinScale,   { toValue: 0.2, duration: 180, useNativeDriver: true }),
@@ -528,7 +528,7 @@ export default function PongGame() {
         runCountdown(3);
       });
     });
-  }, []);
+  }, [area.h]);
 
   const handleInsertCoin = useCallback(() => {
     if (!isSubscribed && coins <= 0) {
@@ -754,25 +754,23 @@ export default function PongGame() {
             </View>
           )}
 
-          {/* Coin animation */}
-          {phase === 'coinanim' && (
-            <View style={StyleSheet.absoluteFill as any} pointerEvents="none">
-              <Animated.View style={{
-                position: 'absolute', top: 0,
-                left: frameW / 2 - 28,
-                width: 56, height: 56,
-                alignItems: 'center', justifyContent: 'center',
-                transform: [{ translateY: coinY }, { scale: coinScale }],
-                opacity: coinOpacity,
-              }}>
-                <ArcadeCoin size={56} />
-              </Animated.View>
-            </View>
-          )}
-
         </View>
         )}
       </View>
+
+      {/* Coin animation — root-level overlay so it always centres on the
+          actual screen, not the play frame. */}
+      {phase === 'coinanim' && (
+        <View style={[s.insertOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+          <Animated.View style={[s.fallingCoin, {
+            left: area.w / 2 - 28,
+            transform: [{ translateY: coinY }, { scale: coinScale }],
+            opacity: coinOpacity,
+          }]}>
+            <ArcadeCoin size={56} />
+          </Animated.View>
+        </View>
+      )}
 
       {/* Countdown — root-level overlay so it always centres on the actual
           screen, not the play frame. */}
@@ -952,6 +950,13 @@ const s = StyleSheet.create({
   },
   menuBtnNoCoins: { backgroundColor: '#555', borderColor: '#333' },
   menuBtnTxt: { color: '#000', fontSize: 13, letterSpacing: 4, fontWeight: '800' },
+
+  insertOverlay: { position: 'absolute', top: 0, left: 0, zIndex: 30 },
+  fallingCoin: {
+    position: 'absolute', top: 0,
+    width: 56, height: 56,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   countdownOverlay: {
     position: 'absolute', top: 0, left: 0,
