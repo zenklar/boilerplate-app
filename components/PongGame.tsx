@@ -281,16 +281,22 @@ export default function PongGame() {
     }),
   ).current;
 
-  // Main tick
+  // Main tick — setInterval (constant pacing) instead of recursive setTimeout
+  // which drifts under load on Android. Frame counter lets us drop the demo
+  // tick rate to halve JS-thread cost on the title screen.
+  const tickCount = useRef(0);
   useEffect(() => {
     if (phase !== 'playing' && phase !== 'demo') return;
     const frame = frameRef.current;
     if (!frame.w) return;
-    let raf: any;
-    const step = () => {
+    const isDemo = phase === 'demo';
+    const id = setInterval(() => {
+      tickCount.current++;
+      // Demo on native: skip every other tick (run at 30 fps). Real gameplay
+      // stays at 60 fps so the player's paddle feels responsive.
+      if (isDemo && Platform.OS !== 'web' && (tickCount.current & 1) === 0) return;
       const g = gsRef.current;
-      if (!g) { raf = setTimeout(step, TICK_MS); return; }
-      const isDemo = phase === 'demo';
+      if (!g) return;
       const paddleW = Math.max(40, frame.w * PADDLE_W_FRAC);
       const halfP   = paddleW / 2;
       const halfB   = BALL_SIZE / 2;
@@ -487,10 +493,8 @@ export default function PongGame() {
       }
 
       setTick((t) => t + 1);
-      raf = setTimeout(step, TICK_MS);
-    };
-    raf = setTimeout(step, TICK_MS);
-    return () => clearTimeout(raf);
+    }, TICK_MS);
+    return () => clearInterval(id);
   }, [phase, area.w, area.h]);
 
   function finishRun(g: GS, won: boolean) {
@@ -649,7 +653,10 @@ export default function PongGame() {
     }
   }
 
-  // Electricity — flickering border glow when active
+  // Electricity — flickering border glow when active.
+  // On Android we omit shadowRadius (it forces per-frame rasterisation of the
+  // border, which dominates the JS→UI bridge); the alpha-flicker carries the
+  // effect by itself.
   const electricNodes: React.ReactNode[] = [];
   if (showField && g && g.electricity.active) {
     const t = Date.now();
@@ -658,30 +665,29 @@ export default function PongGame() {
     const thick = 3;
     const c1 = `rgba(255,255,255,${f1.toFixed(2)})`;
     const c2 = `rgba(255,255,255,${f2.toFixed(2)})`;
+    const isAndroid = Platform.OS === 'android';
+    const glow1 = isAndroid ? null : { shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: f1, shadowRadius: 12 };
+    const glow2 = isAndroid ? null : { shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: f2, shadowRadius: 12 };
     electricNodes.push(
       <View key="et" pointerEvents="none" style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: thick,
         backgroundColor: c1,
-        shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: f1, shadowRadius: 12,
+        ...glow1,
       }} />,
       <View key="eb" pointerEvents="none" style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: thick,
         backgroundColor: c2,
-        shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: f2, shadowRadius: 12,
+        ...glow2,
       }} />,
       <View key="el" pointerEvents="none" style={{
         position: 'absolute', top: 0, left: 0, bottom: 0, width: thick,
         backgroundColor: c1,
-        shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: f1, shadowRadius: 12,
+        ...glow1,
       }} />,
       <View key="er" pointerEvents="none" style={{
         position: 'absolute', top: 0, right: 0, bottom: 0, width: thick,
         backgroundColor: c2,
-        shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: f2, shadowRadius: 12,
+        ...glow2,
       }} />,
     );
   }
@@ -732,10 +738,12 @@ export default function PongGame() {
               left: g!.cpuX - paddleW / 2, top: PADDLE_MARGIN,
               width: paddleW, height: PADDLE_H,
               backgroundColor: cpuColor,
-              shadowColor: cpuBoostActive ? '#00EEFF' : 'transparent',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: cpuBoostActive ? 1 : 0,
-              shadowRadius: cpuBoostActive ? 20 : 0,
+              ...(Platform.OS === 'android' ? null : {
+                shadowColor: cpuBoostActive ? '#00EEFF' : 'transparent',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: cpuBoostActive ? 1 : 0,
+                shadowRadius: cpuBoostActive ? 20 : 0,
+              }),
             }} />
           )}
 
@@ -747,10 +755,12 @@ export default function PongGame() {
               top: frameH - PADDLE_MARGIN - PADDLE_H - playerBoostLift,
               width: paddleW, height: PADDLE_H,
               backgroundColor: playerColor,
-              shadowColor: playerBoostReady ? '#FFD700' : 'transparent',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: playerBoostReady ? 0.35 : 0,
-              shadowRadius: playerBoostReady ? 6 : 0,
+              ...(Platform.OS === 'android' ? null : {
+                shadowColor: playerBoostReady ? '#FFD700' : 'transparent',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: playerBoostReady ? 0.35 : 0,
+                shadowRadius: playerBoostReady ? 6 : 0,
+              }),
             }} />
           )}
 

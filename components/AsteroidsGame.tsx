@@ -90,8 +90,15 @@ interface Asteroid {
   radius: number; size: Size;
   rot: number; rotSpeed: number;
   verts: number[]; // per-vertex radius offsets, evenly spaced angles
+  // Precomputed SVG polygon "points" string — verts never change after creation,
+  // so we cache the parsed string to avoid rebuilding it 60×/sec on every asteroid.
+  pts: string;
 }
-interface Bullet { x: number; y: number; vx: number; vy: number; life: number; }
+interface Bullet {
+  x: number; y: number; vx: number; vy: number; life: number;
+  // Velocity is fixed at creation, so cache the rotation in degrees once.
+  angle: number;
+}
 interface Enemy {
   id: number;
   /** Which sprite from constants/enemyImages.ts to render. */
@@ -106,7 +113,7 @@ interface Enemy {
   /** Ticks remaining of the deflection shield flash (after an asteroid bounce). */
   shieldFlash: number;
 }
-interface EnemyBullet { x: number; y: number; vx: number; vy: number; life: number; }
+interface EnemyBullet { x: number; y: number; vx: number; vy: number; life: number; angle: number; }
 interface Particle {
   id: number; x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; size: number;
@@ -165,11 +172,19 @@ function mkAsteroid(
       verts.push(r * rand(0.85, 1.20)); // normal outer vertex
     }
   }
+  // Precompute SVG polygon points string once (verts are immutable after this).
+  const step = (Math.PI * 2) / verts.length;
+  let pts = '';
+  for (let i = 0; i < verts.length; i++) {
+    const ang = i * step - Math.PI / 2;
+    pts += (i ? ' ' : '') + (r + Math.cos(ang) * verts[i]) + ',' + (r + Math.sin(ang) * verts[i]);
+  }
   return {
     id: uid(), x, y,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
     radius: r, size, rot: rand(0, 360), rotSpeed: rand(-1.5, 1.5),
     verts,
+    pts,
   };
 }
 
@@ -199,20 +214,6 @@ function mkEnemy(W: number, H: number, lvl: number, avoidX: number, avoidY: numb
     driftCD: 40 + Math.floor(rand(0, 40)),
     shieldFlash: 0,
   };
-}
-
-/** Convert stored per-vertex radii to an SVG polygon points string.
- *  The SVG viewport is (radius*2) × (radius*2); centre is (radius, radius). */
-function asteroidPoints(a: Asteroid): string {
-  const cx = a.radius;
-  const cy = a.radius;
-  const step = (Math.PI * 2) / a.verts.length;
-  return a.verts
-    .map((r, i) => {
-      const angle = i * step - Math.PI / 2; // start at top
-      return `${cx + Math.cos(angle) * r},${cy + Math.sin(angle) * r}`;
-    })
-    .join(' ');
 }
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
@@ -266,7 +267,10 @@ export default function AsteroidsGame() {
   const loadRuns = useGameUIStore((s) => s.loadRuns);
   const selectedShipId = useShipStore((s) => s.selectedShipId);
   const loadSelectedShip = useShipStore((s) => s.loadSelectedShip);
-  const selectedShip = SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0];
+  const selectedShip = React.useMemo(
+    () => SHIPS.find((s) => s.id === selectedShipId) ?? SHIPS[0],
+    [selectedShipId],
+  );
 
   const gsRef = useRef<GS | null>(null);
   const thrustSoundRef = useRef<{ stop: () => void } | null>(null);
@@ -401,9 +405,11 @@ export default function AsteroidsGame() {
             life: 22, maxLife: 22, size: rand(2, 4.5), kind: 'thrust',
           });
         }
-        g.particles = g.particles
-          .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.92 }))
-          .filter((p) => p.life > 0);
+        for (let i = g.particles.length - 1; i >= 0; i--) {
+          const p = g.particles[i];
+          p.x += p.vx; p.y += p.vy; p.life--; p.size *= 0.92;
+          if (p.life <= 0) g.particles.splice(i, 1);
+        }
         // Reached center — hand off to playing
         if (g.sy <= H / 2) {
           g.sy = H / 2; g.svx = 0; g.svy = 0;
@@ -423,6 +429,12 @@ export default function AsteroidsGame() {
 
       const isDemo = g.phase === 'demo';
       frame.current++;
+      // Demo (title-screen autoplay) on native runs at 30 fps to free the JS
+      // thread before the player taps Play. Real gameplay stays at 60 fps.
+      if (isDemo && Platform.OS !== 'web' && (frame.current & 1) === 0) {
+        setTick((t) => t + 1);
+        return;
+      }
       const c = ctrl.current;
 
       /* Demo: AI controls the ship (sets sAngle directly + ctrl.fire) */
@@ -501,12 +513,14 @@ export default function AsteroidsGame() {
       if (c.fire && c.fireCD <= 0) {
         const r = toR(g.sAngle - 90);
         const tip = SHIP_SIZE / 2 + 4;
+        const bvx = Math.cos(r) * BULLET_SPEED + g.svx;
+        const bvy = Math.sin(r) * BULLET_SPEED + g.svy;
         g.bullets.push({
           x: g.sx + Math.cos(r) * tip,
           y: g.sy + Math.sin(r) * tip,
-          vx: Math.cos(r) * BULLET_SPEED + g.svx,
-          vy: Math.sin(r) * BULLET_SPEED + g.svy,
+          vx: bvx, vy: bvy,
           life: BULLET_LIFETIME,
+          angle: (Math.atan2(bvy, bvx) * 180) / Math.PI,
         });
         c.fireCD = FIRE_CD;
         g.bulletsShot++;
@@ -514,23 +528,29 @@ export default function AsteroidsGame() {
       }
       if (c.fireCD > 0) c.fireCD--;
 
-      /* Bullets */
-      g.bullets = g.bullets
-        .map((b) => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
-        .filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+      /* Bullets — mutate in place, no per-frame array/object allocations */
+      for (let i = g.bullets.length - 1; i >= 0; i--) {
+        const b = g.bullets[i];
+        b.x += b.vx; b.y += b.vy; b.life--;
+        if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
+          g.bullets.splice(i, 1);
+        }
+      }
 
-      /* Particles */
-      g.particles = g.particles
-        .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1, size: p.size * 0.92 }))
-        .filter((p) => p.life > 0);
+      /* Particles — mutate in place */
+      for (let i = g.particles.length - 1; i >= 0; i--) {
+        const p = g.particles[i];
+        p.x += p.vx; p.y += p.vy; p.life--; p.size *= 0.92;
+        if (p.life <= 0) g.particles.splice(i, 1);
+      }
 
-      /* Asteroids */
-      g.asteroids = g.asteroids.map((a) => ({
-        ...a,
-        x: wrap(a.x + a.vx, W),
-        y: wrap(a.y + a.vy, H),
-        rot: a.rot + a.rotSpeed,
-      }));
+      /* Asteroids — mutate in place (verts/pts/radius never change) */
+      for (let i = 0; i < g.asteroids.length; i++) {
+        const a = g.asteroids[i];
+        a.x = wrap(a.x + a.vx, W);
+        a.y = wrap(a.y + a.vy, H);
+        a.rot += a.rotSpeed;
+      }
 
       /* Bullet–asteroid collisions */
       const deadA = new Set<number>(), deadB = new Set<number>();
@@ -601,12 +621,14 @@ export default function AsteroidsGame() {
         if (e.fireCD <= 0 && !isDemo && Math.abs(diff) < 12) {
           const spread = enemyAimSpreadForLevel(g.level);
           const r = toR(e.angle - 90) + rand(-spread, spread);
+          const evx = Math.cos(r) * ENEMY_BULLET_SPEED;
+          const evy = Math.sin(r) * ENEMY_BULLET_SPEED;
           g.enemyBullets.push({
             x: e.x + Math.cos(r) * (ENEMY_RADIUS + 4),
             y: e.y + Math.sin(r) * (ENEMY_RADIUS + 4),
-            vx: Math.cos(r) * ENEMY_BULLET_SPEED,
-            vy: Math.sin(r) * ENEMY_BULLET_SPEED,
+            vx: evx, vy: evy,
             life: ENEMY_BULLET_LIFETIME,
+            angle: (Math.atan2(evy, evx) * 180) / Math.PI,
           });
           e.fireCD = enemyFireCDForLevel(g.level) + Math.floor(rand(0, 40));
           if (Platform.OS === 'web') playEnemyShoot();
@@ -652,10 +674,14 @@ export default function AsteroidsGame() {
         ];
       }
 
-      /* Enemy bullets — advance and cull */
-      g.enemyBullets = g.enemyBullets
-        .map((b) => ({ ...b, x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 }))
-        .filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+      /* Enemy bullets — advance and cull in place */
+      for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
+        const b = g.enemyBullets[i];
+        b.x += b.vx; b.y += b.vy; b.life--;
+        if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
+          g.enemyBullets.splice(i, 1);
+        }
+      }
 
       /* Player bullets → enemies (3 hp each) */
       const enemyDead = new Set<number>();
@@ -1141,7 +1167,6 @@ export default function AsteroidsGame() {
         {/* Asteroids — jagged polygons via react-native-svg (works on web too) */}
         {g?.asteroids.map((a) => {
           const d = a.radius * 2;
-          const pts = asteroidPoints(a);
           return (
             <View
               key={a.id}
@@ -1156,25 +1181,22 @@ export default function AsteroidsGame() {
               pointerEvents="none"
             >
               <Svg width={d} height={d}>
-                <Polygon points={pts} fill="white" stroke="#CCC" strokeWidth={1.5} />
+                <Polygon points={a.pts} fill="white" stroke="#CCC" strokeWidth={1.5} />
               </Svg>
             </View>
           );
         })}
 
         {/* Bullets — during active play or demo (green laser bolts) */}
-        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => {
-          const angle = (Math.atan2(b.vy, b.vx) * 180) / Math.PI;
-          return (
-            <View
-              key={i}
-              style={[
-                s.bullet,
-                { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${angle}deg` }] },
-              ]}
-            />
-          );
-        })}
+        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => (
+          <View
+            key={i}
+            style={[
+              s.bullet,
+              { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${b.angle}deg` }] },
+            ]}
+          />
+        ))}
 
         {/* Enemy saucers — sprite (rotated to face player) + HP bar + shield flash */}
         {g?.phase === 'playing' && g.enemies.map((e) => {
@@ -1237,18 +1259,15 @@ export default function AsteroidsGame() {
         })}
 
         {/* Enemy bullets — red laser bolts */}
-        {g?.phase === 'playing' && g.enemyBullets.map((b, i) => {
-          const angle = (Math.atan2(b.vy, b.vx) * 180) / Math.PI;
-          return (
-            <View
-              key={`eb${i}`}
-              style={[
-                s.enemyBullet,
-                { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${angle}deg` }] },
-              ]}
-            />
-          );
-        })}
+        {g?.phase === 'playing' && g.enemyBullets.map((b, i) => (
+          <View
+            key={`eb${i}`}
+            style={[
+              s.enemyBullet,
+              { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${b.angle}deg` }] },
+            ]}
+          />
+        ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
         {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p) => {
@@ -1521,19 +1540,26 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
 
+  // Note: on Android, per-frame shadowRadius re-rasterizes the bullet sprite
+  // every tick — extremely expensive with many bullets in flight. iOS and web
+  // handle this fine, so we keep the glow there.
   bullet: {
     position: 'absolute',
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#7FE3FF',
-    shadowColor: '#7FE3FF', shadowOpacity: 1, shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+    ...(Platform.OS === 'android' ? {} : {
+      shadowColor: '#7FE3FF', shadowOpacity: 1, shadowRadius: 6,
+      shadowOffset: { width: 0, height: 0 },
+    }),
   },
   enemyBullet: {
     position: 'absolute',
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#FF3030',
-    shadowColor: '#FF0000', shadowOpacity: 1, shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+    ...(Platform.OS === 'android' ? {} : {
+      shadowColor: '#FF0000', shadowOpacity: 1, shadowRadius: 6,
+      shadowOffset: { width: 0, height: 0 },
+    }),
   },
 
   hud: {

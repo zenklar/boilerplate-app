@@ -17,8 +17,9 @@ import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountd
 
 /** Classic arcade-style block in a single View: solid color with asymmetric
  *  borders for the highlight/shadow bevel. One View per cell beats stacking
- *  five overlay Views — matters when the board fills up. */
-function PixelBlock({ size, color }: { size: number; color: string }) {
+ *  five overlay Views — matters when the board fills up. Memoized so that
+ *  unchanged locked cells don't reconcile on every gravity tick. */
+const PixelBlock = React.memo(function PixelBlock({ size, color }: { size: number; color: string }) {
   const b = Math.max(2, Math.floor(size * 0.18));
   return (
     <View style={{
@@ -31,7 +32,30 @@ function PixelBlock({ size, color }: { size: number; color: string }) {
       borderRightWidth: b, borderRightColor: 'rgba(0,0,0,0.28)',
     }} />
   );
-}
+});
+
+/** Locked-board layer: re-renders only when the board array reference changes
+ *  (on piece lock or line clear). Most frames just move the active piece, so
+ *  skipping this layer's reconcile is the single biggest perf win on Android. */
+const LockedBoard = React.memo(function LockedBoard({ board, cell }: { board: Cell[][]; cell: number }) {
+  const out: React.ReactNode[] = [];
+  for (let y = 0; y < board.length; y++) {
+    const row = board[y];
+    for (let x = 0; x < row.length; x++) {
+      const c = row[x];
+      if (!c) continue;
+      out.push(
+        <View key={`f-${y}-${x}`} style={{
+          position: 'absolute',
+          left: x * cell, top: y * cell,
+        }}>
+          <PixelBlock size={cell} color={TETROMINO_COLORS[c]} />
+        </View>
+      );
+    }
+  }
+  return <>{out}</>;
+});
 
 const BoardGrid = React.memo(function BoardGrid({ cell }: { cell: number }) {
   const lines: React.ReactNode[] = [];
@@ -694,25 +718,26 @@ export default function TetrisGame() {
   const g = gsRef.current;
   const showBoard = g && (phase === 'playing' || phase === 'gameover' || phase === 'demo');
 
-  // Compose display board: locked cells + active piece + ghost
-  let displayCells: Cell[][] | null = null;
-  let ghostCells: boolean[][] | null = null;
-  if (showBoard) {
-    displayCells = g!.board.map((r) => r.slice());
-    if (g!.active) {
-      const a = g!.active;
-      const gy = ghostY(g!.board, a);
-      ghostCells = Array.from({ length: BOARD_H }, () => Array(BOARD_W).fill(false));
-      const m = shape(a);
-      for (let dy = 0; dy < m.length; dy++) {
-        for (let dx = 0; dx < m[dy].length; dx++) {
-          if (!m[dy][dx]) continue;
-          const gxCol = a.x + dx;
-          const gyRow = gy + dy;
-          if (gyRow >= 0 && gyRow < BOARD_H) ghostCells![gyRow][gxCol] = true;
-          const ay = a.y + dy;
-          if (ay >= 0 && ay < BOARD_H) displayCells[ay][a.x + dx] = a.type;
-        }
+  // Compute the active piece's cells + ghost cells WITHOUT rebuilding the
+  // whole board. The locked layer is rendered via a separate memoised
+  // component keyed on g.board, so it skips reconcile on every gravity tick.
+  type ActiveCell = { y: number; x: number; type: TetrominoType };
+  let activeCells: ActiveCell[] | null = null;
+  let ghostList: { y: number; x: number }[] | null = null;
+  if (showBoard && g!.active) {
+    const a = g!.active;
+    const gy = ghostY(g!.board, a);
+    const m = shape(a);
+    activeCells = [];
+    ghostList = [];
+    for (let dy = 0; dy < m.length; dy++) {
+      for (let dx = 0; dx < m[dy].length; dx++) {
+        if (!m[dy][dx]) continue;
+        const ay = a.y + dy;
+        const gyRow = gy + dy;
+        const cx = a.x + dx;
+        if (ay >= 0 && ay < BOARD_H) activeCells.push({ y: ay, x: cx, type: a.type });
+        if (gyRow >= 0 && gyRow < BOARD_H) ghostList.push({ y: gyRow, x: cx });
       }
     }
   }
@@ -808,31 +833,34 @@ export default function TetrisGame() {
           }}>
           {/* Grid lines — 10 verticals + 20 horizontals beats 200 cells */}
           <BoardGrid cell={CELL} />
+          {/* Locked cells — memoised; only reconciles on lock / line-clear */}
+          {showBoard && <LockedBoard board={g!.board} cell={CELL} />}
           {/* Ghost piece outline */}
-          {ghostCells && ghostCells.map((row, y) => row.map((on, x) => on && !(displayCells && displayCells[y][x]) ? (
-            <View key={`gh-${y}-${x}`} style={{
+          {ghostList && ghostList.map((c) => (
+            <View key={`gh-${c.y}-${c.x}`} style={{
               position: 'absolute',
-              left: x * CELL, top: y * CELL,
+              left: c.x * CELL, top: c.y * CELL,
               width: CELL, height: CELL,
               borderWidth: 1, borderColor: '#3A3A3A',
             }} />
-          ) : null))}
-          {/* Filled cells (gradient blocks) */}
-          {displayCells && displayCells.map((row, y) => row.map((cell, x) => cell ? (
-            <View key={`f-${y}-${x}`} style={{
+          ))}
+          {/* Active piece (4 cells, drawn on top of the locked layer) */}
+          {activeCells && activeCells.map((c) => (
+            <View key={`a-${c.y}-${c.x}`} style={{
               position: 'absolute',
-              left: x * CELL, top: y * CELL,
+              left: c.x * CELL, top: c.y * CELL,
             }}>
-              <PixelBlock size={CELL} color={TETROMINO_COLORS[cell]} />
+              <PixelBlock size={CELL} color={TETROMINO_COLORS[c.type]} />
             </View>
-          ) : null))}
+          ))}
 
           {/* Line-clear flash — pulses cleared rows white before collapse */}
-          {showBoard && g!.flashTimer > 0 && g!.flashRows.map((y) => {
-            // 3-phase pulse over FLASH_FRAMES: bright → dim → bright fade
+          {showBoard && g!.flashTimer > 0 && (() => {
+            // 3-phase pulse over FLASH_FRAMES: bright → dim → bright fade.
+            // Computed ONCE per render (was per-row inside .map).
             const t = g!.flashTimer / FLASH_FRAMES;
-            const opacity = Math.abs(Math.sin(t * Math.PI * 2));
-            return (
+            const opacity = 0.55 + 0.45 * Math.abs(Math.sin(t * Math.PI * 2));
+            return g!.flashRows.map((y) => (
               <View
                 key={`flash-${y}`}
                 style={{
@@ -840,11 +868,11 @@ export default function TetrisGame() {
                   left: 0, top: y * CELL,
                   width: cellsW, height: CELL,
                   backgroundColor: '#FFFFFF',
-                  opacity: 0.55 + 0.45 * opacity,
+                  opacity,
                 }}
               />
-            );
-          })}
+            ));
+          })()}
           </View>
         </Pressable>
 

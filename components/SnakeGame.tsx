@@ -114,7 +114,8 @@ function demoAI(g: GS): Dir {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-function SnakeCell({ size, isHead }: { size: number; isHead: boolean }) {
+// Memoized so unchanged segments don't reconcile on every step.
+const SnakeCell = React.memo(function SnakeCell({ size, isHead }: { size: number; isHead: boolean }) {
   const color = isHead ? SNAKE_HEAD : SNAKE_BODY;
   const b = Math.max(1, Math.floor(size * 0.15));
   return (
@@ -127,9 +128,9 @@ function SnakeCell({ size, isHead }: { size: number; isHead: boolean }) {
       borderRightWidth: b,  borderRightColor: 'rgba(0,0,0,0.25)',
     }} />
   );
-}
+});
 
-function FoodCell({ size }: { size: number }) {
+const FoodCell = React.memo(function FoodCell({ size }: { size: number }) {
   const inset = Math.max(2, Math.floor(size * 0.22));
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -139,7 +140,30 @@ function FoodCell({ size }: { size: number }) {
       }} />
     </View>
   );
-}
+});
+
+/** Static grid lines — same on every frame so we memoise the whole subtree.
+ *  Mirrors the BoardGrid optimisation in Tetris. */
+const SnakeGrid = React.memo(function SnakeGrid({ cell, cellsW, cellsH }: { cell: number; cellsW: number; cellsH: number }) {
+  const lines: React.ReactNode[] = [];
+  for (let i = 1; i < BOARD_W; i++) {
+    lines.push(
+      <View key={`v${i}`} style={{
+        position: 'absolute', left: i * cell, top: 0,
+        width: 1, height: cellsH, backgroundColor: '#101010',
+      }} />
+    );
+  }
+  for (let i = 1; i < BOARD_H; i++) {
+    lines.push(
+      <View key={`h${i}`} style={{
+        position: 'absolute', top: i * cell, left: 0,
+        height: 1, width: cellsW, backgroundColor: '#101010',
+      }} />
+    );
+  }
+  return <>{lines}</>;
+});
 
 // ── Main component ─────────────────────────────────────────────────────────
 export default function SnakeGame() {
@@ -464,19 +488,8 @@ export default function SnakeGame() {
             width: cellsW, height: cellsH,
           }}>
 
-          {/* Grid lines */}
-          {Array.from({ length: BOARD_W - 1 }, (_, i) => (
-            <View key={`v${i}`} style={{
-              position: 'absolute', left: (i + 1) * CELL, top: 0,
-              width: 1, height: cellsH, backgroundColor: '#101010',
-            }} />
-          ))}
-          {Array.from({ length: BOARD_H - 1 }, (_, i) => (
-            <View key={`h${i}`} style={{
-              position: 'absolute', top: (i + 1) * CELL, left: 0,
-              height: 1, width: cellsW, backgroundColor: '#101010',
-            }} />
-          ))}
+          {/* Grid lines — memoized so they don't reconcile on every snake step */}
+          <SnakeGrid cell={CELL} cellsW={cellsW} cellsH={cellsH} />
 
           {/* Food pellet */}
           {showBoard && (
