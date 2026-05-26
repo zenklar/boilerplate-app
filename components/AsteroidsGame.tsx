@@ -1542,7 +1542,9 @@ const s = StyleSheet.create({
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
-    textShadow: '0px 0px 24px #FFD700',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 24,
   },
 
   /* Controls overlay */
