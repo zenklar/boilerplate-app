@@ -685,9 +685,10 @@ const s = StyleSheet.create({
   },
 
   countdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
+    zIndex: 40,
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,
@@ -695,7 +696,7 @@ const s = StyleSheet.create({
   },
 
   gameOverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     backgroundColor: BG_COLOR,
     justifyContent: 'center', alignItems: 'center', gap: 18,
     zIndex: 50,

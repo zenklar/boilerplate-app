@@ -1490,7 +1490,7 @@ const s = StyleSheet.create({
   // zIndex keeps it above the game canvas + give-up button + controls on
   // Android new-arch, where sibling stacking can otherwise misbehave.
   gameOverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     backgroundColor: '#000',
     justifyContent: 'center', alignItems: 'center', gap: 18,
     zIndex: 50,
@@ -1564,10 +1564,11 @@ const s = StyleSheet.create({
 
   // Countdown overlay
   countdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
     pointerEvents: 'none',
+    zIndex: 40,
   },
   countdownText: {
     color: '#FFF', fontSize: 96, fontWeight: '900', letterSpacing: 8,

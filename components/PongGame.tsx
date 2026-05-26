@@ -954,9 +954,10 @@ const s = StyleSheet.create({
   menuBtnTxt: { color: '#000', fontSize: 13, letterSpacing: 4, fontWeight: '800' },
 
   countdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
+    zIndex: 40,
   },
   countdownText: {
     color: '#FFF', fontSize: 84, fontWeight: '900', letterSpacing: 8,
@@ -964,7 +965,7 @@ const s = StyleSheet.create({
   },
 
   gameOverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0,
     backgroundColor: '#000',
     justifyContent: 'center', alignItems: 'center', gap: 16,
     zIndex: 50,
