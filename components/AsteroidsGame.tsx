@@ -18,6 +18,7 @@ import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import { useEnemyCodexStore } from '../store/enemyCodexStore';
+import { usePerformanceStore } from '../store/performanceStore';
 import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import ArcadeCoin from './ArcadeCoin';
@@ -25,7 +26,7 @@ import ENEMY_IMAGES, { ENEMY_DESIGN_IDS } from '../constants/enemyImages';
 import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed, playEnemyShoot } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
-const TICK_MS = 16;
+const BASE_SIM_FPS = 60;
 const SHIP_SIZE = 44;
 const ENEMY_BULLET_SPEED_BASE = 5.0;
 const BULLET_SPEED = ENEMY_BULLET_SPEED_BASE * 1.32;
@@ -310,6 +311,7 @@ export default function AsteroidsGame() {
   const coins    = useCoinStore((s) => s.coins);
   const spendCoin = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
+  const fpsCap = usePerformanceStore((s) => s.fpsCap);
 
   /* ── Load persisted state ── */
   useEffect(() => {
@@ -319,6 +321,7 @@ export default function AsteroidsGame() {
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
     useEnemyCodexStore.getState().load();
+    usePerformanceStore.getState().load();
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -397,16 +400,21 @@ export default function AsteroidsGame() {
   }, []);
 
   /* ── Single long-running game loop ── */
-  // On Android we still SIMULATE at 60 Hz, but only push a React render every
-  // other frame (30 fps display). The game state lives in gsRef.current so
-  // physics stays accurate; React just paints at half the rate, which cuts
-  // reconcile + Yoga + view-bridge cost in half on slow devices/emulators.
-  const ANDROID_HALF_RENDER = Platform.OS === 'android';
-  // On Android cap the particle pool — particle storms during combat were a
-  // dominant cause of frame drops on lower-end devices.
-  const MAX_PARTICLES = Platform.OS === 'android' ? 60 : 240;
+  // Keep simulation fixed at 60 Hz for stable gameplay pacing, but drive it
+  // from requestAnimationFrame so web/native present timing is smoother.
+  // Lower particle caps reduce JS+layout pressure during heavy combat.
+  const MAX_PARTICLES = Platform.OS === 'web' ? 120 : 90;
   useEffect(() => {
-    const id = setInterval(() => {
+    const simFps = fpsCap;
+    const simStepMs = 1000 / simFps;
+    const stepMul = BASE_SIM_FPS / simFps;
+    const frictionPerStep = Math.pow(FRICTION, stepMul);
+    let rafId = 0;
+    let lastTs = 0;
+    let accMs = 0;
+    const MAX_ACCUM_MS = simStepMs * 4;
+
+    const step = () => {
       const { w: W, h: H } = dimRef.current;
       if (!W || !H) { setTick((t) => t + 1); return; }
 
@@ -414,8 +422,8 @@ export default function AsteroidsGame() {
 
       /* ── Intro: ship flies in from below, no asteroids yet ── */
       if (g?.phase === 'intro') {
-        g.sy += g.svy;
-        g.sx = wrap(g.sx + g.svx, W);
+        g.sy += g.svy * stepMul;
+        g.sx = wrap(g.sx + g.svx * stepMul, W);
         // Thrust particles while flying up
         const exhaustAngle = toR(g.sAngle + 90);
         const ex = g.sx + Math.cos(exhaustAngle) * (SHIP_SIZE / 2);
@@ -432,7 +440,10 @@ export default function AsteroidsGame() {
         }
         for (let i = g.particles.length - 1; i >= 0; i--) {
           const p = g.particles[i];
-          p.x += p.vx; p.y += p.vy; p.life--; p.size *= 0.92;
+          p.x += p.vx * stepMul;
+          p.y += p.vy * stepMul;
+          p.life -= stepMul;
+          p.size *= Math.pow(0.92, stepMul);
           if (p.life <= 0) g.particles.splice(i, 1);
         }
         // Reached center — hand off to playing
@@ -453,13 +464,7 @@ export default function AsteroidsGame() {
       if (!g || (g.phase !== 'playing' && g.phase !== 'demo')) { setTick((t) => t + 1); return; }
 
       const isDemo = g.phase === 'demo';
-      frame.current++;
-      // Demo (title-screen autoplay) on native runs at 30 fps to free the JS
-      // thread before the player taps Play. Real gameplay stays at 60 fps.
-      if (isDemo && Platform.OS !== 'web' && (frame.current & 1) === 0) {
-        setTick((t) => t + 1);
-        return;
-      }
+      frame.current += stepMul;
       const c = ctrl.current;
 
       /* Demo: AI controls the ship (sets sAngle directly + ctrl.fire) */
@@ -476,18 +481,18 @@ export default function AsteroidsGame() {
           g.sAngle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
         }
         // Arrow keys still work on web for rotation (override mouse aim)
-        if (c.left) g.sAngle -= ROT_SPD;
-        if (c.right) g.sAngle += ROT_SPD;
+        if (c.left) g.sAngle -= ROT_SPD * stepMul;
+        if (c.right) g.sAngle += ROT_SPD * stepMul;
       } else if (!isDemo) {
-        if (c.left) g.sAngle -= ROT_SPD;
-        if (c.right) g.sAngle += ROT_SPD;
+        if (c.left) g.sAngle -= ROT_SPD * stepMul;
+        if (c.right) g.sAngle += ROT_SPD * stepMul;
       }
 
       /* Thrust + particle spawn + thrust sound */
       if (c.thrustPower > 0) {
         const r = toR(g.sAngle - 90);
-        g.svx += Math.cos(r) * THRUST_PWR * c.thrustPower;
-        g.svy += Math.sin(r) * THRUST_PWR * c.thrustPower;
+        g.svx += Math.cos(r) * THRUST_PWR * c.thrustPower * stepMul;
+        g.svy += Math.sin(r) * THRUST_PWR * c.thrustPower * stepMul;
         const spd = Math.sqrt(g.svx ** 2 + g.svy ** 2);
         if (spd > MAX_SPD) {
           g.svx = (g.svx / spd) * MAX_SPD;
@@ -501,7 +506,8 @@ export default function AsteroidsGame() {
         const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
         const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
         // Scale particle count with thrust power so gentle pushes emit fewer sparks
-        const particleCount = Math.max(1, Math.round(PARTICLE_SPAWN * c.thrustPower));
+        const spawnBudget = PARTICLE_SPAWN * c.thrustPower * stepMul;
+        const particleCount = Math.floor(spawnBudget) + (Math.random() < (spawnBudget % 1) ? 1 : 0);
         for (let i = 0; i < particleCount; i++) {
           const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
           const pDir = exhaustR + spread;
@@ -522,7 +528,8 @@ export default function AsteroidsGame() {
       }
 
       /* Friction & move */
-      g.svx *= FRICTION; g.svy *= FRICTION;
+      g.svx *= frictionPerStep;
+      g.svy *= frictionPerStep;
       if (isDemo) {
         // Keep the demo ship anchored at center so the preview composition
         // stays clean and consistent across platforms.
@@ -531,10 +538,10 @@ export default function AsteroidsGame() {
         g.svx = 0;
         g.svy = 0;
       } else {
-        g.sx = wrap(g.sx + g.svx, W);
-        g.sy = wrap(g.sy + g.svy, H);
+        g.sx = wrap(g.sx + g.svx * stepMul, W);
+        g.sy = wrap(g.sy + g.svy * stepMul, H);
       }
-      if (g.sInv > 0) g.sInv--;
+      if (g.sInv > 0) g.sInv -= stepMul;
 
       /* Fire */
       if (c.fire && c.fireCD <= 0) {
@@ -553,12 +560,14 @@ export default function AsteroidsGame() {
         g.bulletsShot++;
         if (!isDemo) playShoot();
       }
-      if (c.fireCD > 0) c.fireCD--;
+      if (c.fireCD > 0) c.fireCD -= stepMul;
 
       /* Bullets — mutate in place, no per-frame array/object allocations */
       for (let i = g.bullets.length - 1; i >= 0; i--) {
         const b = g.bullets[i];
-        b.x += b.vx; b.y += b.vy; b.life--;
+        b.x += b.vx * stepMul;
+        b.y += b.vy * stepMul;
+        b.life -= stepMul;
         if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
           g.bullets.splice(i, 1);
         }
@@ -567,16 +576,19 @@ export default function AsteroidsGame() {
       /* Particles — mutate in place */
       for (let i = g.particles.length - 1; i >= 0; i--) {
         const p = g.particles[i];
-        p.x += p.vx; p.y += p.vy; p.life--; p.size *= 0.92;
+        p.x += p.vx * stepMul;
+        p.y += p.vy * stepMul;
+        p.life -= stepMul;
+        p.size *= Math.pow(0.92, stepMul);
         if (p.life <= 0) g.particles.splice(i, 1);
       }
 
       /* Asteroids — mutate in place (verts/pts/radius never change) */
       for (let i = 0; i < g.asteroids.length; i++) {
         const a = g.asteroids[i];
-        a.x = wrap(a.x + a.vx, W);
-        a.y = wrap(a.y + a.vy, H);
-        a.rot += a.rotSpeed;
+        a.x = wrap(a.x + a.vx * stepMul, W);
+        a.y = wrap(a.y + a.vy * stepMul, H);
+        a.rot += a.rotSpeed * stepMul;
       }
 
       /* Bullet–asteroid collisions */
@@ -591,7 +603,7 @@ export default function AsteroidsGame() {
             g.score += SCORE_MAP[a.size];
             g.asteroidsDestroyed++;
             // Debris burst — more particles, bigger, faster, longer-lived
-            const numDebris = a.size === 'large' ? 22 : a.size === 'medium' ? 14 : 8;
+            const numDebris = a.size === 'large' ? 14 : a.size === 'medium' ? 9 : 5;
             const maxSpd = a.size === 'large' ? 5.5 : a.size === 'medium' ? 4.0 : 3.0;
             for (let di = 0; di < numDebris; di++) {
               const dDir = rand(0, Math.PI * 2);
@@ -622,7 +634,7 @@ export default function AsteroidsGame() {
       const ENEMY_ROT_SPD = 2.5; // degrees per tick — slower than the player
       for (const e of g.enemies) {
         // Drift movement
-        e.driftCD--;
+        e.driftCD -= stepMul;
         if (e.driftCD <= 0) {
           const baseSpd = 1.2 + Math.min(1.4, (g.level - ENEMY_FIRST_LEVEL) * 0.12);
           const dir = rand(0, Math.PI * 2);
@@ -630,21 +642,21 @@ export default function AsteroidsGame() {
           e.vy = Math.sin(dir) * baseSpd * 0.55;
           e.driftCD = 60 + Math.floor(rand(0, 80));
         }
-        e.x = wrap(e.x + e.vx, W);
-        e.y += e.vy;
+        e.x = wrap(e.x + e.vx * stepMul, W);
+        e.y += e.vy * stepMul;
         if (e.y < ENEMY_RADIUS) { e.y = ENEMY_RADIUS; e.vy = Math.abs(e.vy); }
         if (e.y > H - ENEMY_RADIUS) { e.y = H - ENEMY_RADIUS; e.vy = -Math.abs(e.vy); }
 
         // Rotate to face the player (sprite-style angle: 0 = up)
         const targetAngle = Math.atan2(g.sy - e.y, g.sx - e.x) * (180 / Math.PI) + 90;
         let diff = ((targetAngle - e.angle + 540) % 360) - 180;
-        const turn = Math.min(ENEMY_ROT_SPD, Math.abs(diff));
+        const turn = Math.min(ENEMY_ROT_SPD * stepMul, Math.abs(diff));
         e.angle += Math.sign(diff) * turn;
 
-        if (e.shieldFlash > 0) e.shieldFlash--;
+        if (e.shieldFlash > 0) e.shieldFlash -= stepMul;
 
         // Fire forward only when roughly aligned (skip during demo just in case)
-        e.fireCD--;
+        e.fireCD -= stepMul;
         if (e.fireCD <= 0 && !isDemo && Math.abs(diff) < 12) {
           const spread = enemyAimSpreadForLevel(g.level);
           const r = toR(e.angle - 90) + rand(-spread, spread);
@@ -682,7 +694,7 @@ export default function AsteroidsGame() {
               astroBorn.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
             }
             // Small dust puff so the deflection is visible
-            for (let k = 0; k < 10; k++) {
+            for (let k = 0; k < 6; k++) {
               const dDir = rand(0, Math.PI * 2);
               const dSpd = rand(0.6, 2.2);
               g.particles.push({
@@ -704,7 +716,9 @@ export default function AsteroidsGame() {
       /* Enemy bullets — advance and cull in place */
       for (let i = g.enemyBullets.length - 1; i >= 0; i--) {
         const b = g.enemyBullets[i];
-        b.x += b.vx; b.y += b.vy; b.life--;
+        b.x += b.vx * stepMul;
+        b.y += b.vy * stepMul;
+        b.life -= stepMul;
         if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
           g.enemyBullets.splice(i, 1);
         }
@@ -733,7 +747,7 @@ export default function AsteroidsGame() {
               enemyDead.add(e.id);
               g.score += ENEMY_SCORE;
               useEnemyCodexStore.getState().markKilled(e.designId);
-              for (let k = 0; k < 22; k++) {
+              for (let k = 0; k < 14; k++) {
                 const dDir = rand(0, Math.PI * 2);
                 const dSpd = rand(1, 4.5);
                 const dLife = Math.round(rand(26, 44));
@@ -829,13 +843,25 @@ export default function AsteroidsGame() {
         g.particles.splice(0, g.particles.length - MAX_PARTICLES);
       }
 
-      // Render at half rate on Android (simulation already ran above).
-      if (ANDROID_HALF_RENDER && (frame.current & 1) !== 0) return;
       setTick((t) => t + 1);
-    }, TICK_MS);
+    };
 
-    return () => clearInterval(id);
-  }, []); // single interval, always reads current refs
+    const loop = (ts: number) => {
+      if (lastTs === 0) lastTs = ts;
+      const dt = Math.min(50, ts - lastTs);
+      lastTs = ts;
+      accMs = Math.min(MAX_ACCUM_MS, accMs + dt);
+      while (accMs >= simStepMs) {
+        step();
+        accMs -= simStepMs;
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [fpsCap]); // single rAF loop, always reads current refs
 
   /* ── Init or restart game with given dimensions ──
    * If flyInTicks is provided, the ship starts at the bottom of the visible
@@ -1284,7 +1310,7 @@ export default function AsteroidsGame() {
         ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
-        {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p) => {
+        {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p, i) => {
           const t = p.life / p.maxLife;
           let rgb: string;
           let opacity: number;
@@ -1302,7 +1328,7 @@ export default function AsteroidsGame() {
           }
           return (
             <View
-              key={p.id}
+              key={`${p.id}-${i}`}
               style={{
                 position: 'absolute',
                 width: p.size, height: p.size,

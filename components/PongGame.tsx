@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { usePongStore, PongRun } from '../store/pongStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
+import { usePerformanceStore } from '../store/performanceStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
@@ -16,7 +17,7 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-const TICK_MS = 16;
+const BASE_SIM_FPS = 60;
 const CTRL_H = Platform.OS === 'web' ? 0 : 0;    // boost button removed; slider space handled by SLIDER_H
 const SLIDER_H = Platform.OS === 'web' ? 0 : 68;  // mobile slider control height
 
@@ -158,6 +159,7 @@ export default function PongGame() {
   const coins            = useCoinStore((s) => s.coins);
   const spendCoin        = useCoinStore((s) => s.spendCoin);
   const isSubscribed     = useSubscriptionStore((s) => s.isSubscribed);
+  const fpsCap           = usePerformanceStore((s) => s.fpsCap);
 
   const [phase, setPhase]       = useState<Phase>('idle');
   const [, setTick]             = useState(0);
@@ -187,7 +189,10 @@ export default function PongGame() {
   const cdScale      = useRef(new Animated.Value(1)).current;
   const cdOpacity    = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => { loadHighScore(); }, []);
+  useEffect(() => {
+    loadHighScore();
+    usePerformanceStore.getState().load();
+  }, []);
 
   // Auto-start demo when on idle
   useEffect(() => {
@@ -281,20 +286,18 @@ export default function PongGame() {
     }),
   ).current;
 
-  // Main tick — setInterval (constant pacing) instead of recursive setTimeout
-  // which drifts under load on Android. Frame counter lets us drop the demo
-  // tick rate to halve JS-thread cost on the title screen.
-  const tickCount = useRef(0);
+  // Main tick with global FPS cap. We keep gameplay pacing stable by scaling
+  // per-tick movement/timers relative to the original 60 Hz baseline.
   useEffect(() => {
     if (phase !== 'playing' && phase !== 'demo') return;
     const frame = frameRef.current;
     if (!frame.w) return;
     const isDemo = phase === 'demo';
+    const simFps = fpsCap;
+    const tickMs = 1000 / simFps;
+    const stepMul = BASE_SIM_FPS / simFps;
+    const lerpForStep = (a: number) => 1 - Math.pow(1 - a, stepMul);
     const id = setInterval(() => {
-      tickCount.current++;
-      // Demo on native: skip every other tick (run at 30 fps). Real gameplay
-      // stays at 60 fps so the player's paddle feels responsive.
-      if (isDemo && Platform.OS !== 'web' && (tickCount.current & 1) === 0) return;
       const g = gsRef.current;
       if (!g) return;
       const paddleW = Math.max(40, frame.w * PADDLE_W_FRAC);
@@ -305,11 +308,11 @@ export default function PongGame() {
       if (isDemo) {
         const playerThreat = g.balls.find(b => b.vy > 0);
         const aim = playerThreat ? playerThreat.x : frame.w / 2;
-        g.playerX += (aim - g.playerX) * CPU_DEMO_TRACK * 0.85;
+        g.playerX += (aim - g.playerX) * lerpForStep(CPU_DEMO_TRACK * 0.85);
       } else if (targetXRef.current != null) {
         // Mobile: snap directly (1:1 with finger); web: smooth lerp
         if (Platform.OS === 'web') {
-          g.playerX += (targetXRef.current - g.playerX) * 0.35;
+          g.playerX += (targetXRef.current - g.playerX) * lerpForStep(0.35);
         } else {
           g.playerX = targetXRef.current;
         }
@@ -320,14 +323,14 @@ export default function PongGame() {
       const cpuThreatBall = g.balls.find(b => b.vy < 0);
       const cpuAim = cpuThreatBall ? cpuThreatBall.x : frame.w / 2;
       const trackRate = isDemo ? CPU_DEMO_TRACK : CPU_TRACK;
-      g.cpuX += (cpuAim - g.cpuX) * trackRate;
+      g.cpuX += (cpuAim - g.cpuX) * lerpForStep(trackRate);
       g.cpuX = Math.max(halfP, Math.min(frame.w - halfP, g.cpuX));
 
       // ── Boost timers ──
-      if (g.playerBoostActive > 0) g.playerBoostActive -= 1;
-      if (g.playerBoostCD > 0)     g.playerBoostCD -= 1;
-      if (g.cpuBoostActive > 0)    g.cpuBoostActive -= 1;
-      if (g.cpuBoostCD > 0)        g.cpuBoostCD -= 1;
+      if (g.playerBoostActive > 0) g.playerBoostActive -= stepMul;
+      if (g.playerBoostCD > 0)     g.playerBoostCD -= stepMul;
+      if (g.cpuBoostActive > 0)    g.cpuBoostActive -= stepMul;
+      if (g.cpuBoostCD > 0)        g.cpuBoostCD -= stepMul;
 
       // CPU boost AI
       const cpuYAI = PADDLE_MARGIN + PADDLE_H;
@@ -342,7 +345,7 @@ export default function PongGame() {
 
       // ── Electricity ──
       if (g.electricity.active) {
-        g.electricity.ticksLeft -= 1;
+        g.electricity.ticksLeft -= stepMul;
         if (g.electricity.ticksLeft <= 0) {
           g.electricity.active = false;
           g.electricity.cooldownLeft = ELECTRICITY_CD_MIN +
@@ -350,7 +353,7 @@ export default function PongGame() {
         }
       } else {
         if (g.electricity.cooldownLeft > 0) {
-          g.electricity.cooldownLeft -= 1;
+          g.electricity.cooldownLeft -= stepMul;
         } else {
           g.electricity.active = true;
           g.electricity.ticksLeft = ELECTRICITY_DURATION;
@@ -359,7 +362,7 @@ export default function PongGame() {
 
       // ── Balls ──
       if (g.serveCD > 0) {
-        g.serveCD -= 1;
+        g.serveCD -= stepMul;
       } else {
         const surviving: Ball[] = [];
         let nextServeDir: 1 | -1 = g.serveDir;
@@ -369,8 +372,8 @@ export default function PongGame() {
           let scored = false;
           let spawn: Ball | null = null;
 
-          ball.x += ball.vx;
-          ball.y += ball.vy;
+          ball.x += ball.vx * stepMul;
+          ball.y += ball.vy * stepMul;
 
           // Side walls
           if (ball.x - halfB <= 0 && ball.vx < 0) {
@@ -386,7 +389,7 @@ export default function PongGame() {
           const playerLift = playerBoostLiftFromTicks(g.playerBoostActive);
           const playerY = frame.h - PADDLE_MARGIN - playerLift;
           if (ball.vy > 0 && ball.y + halfB >= playerY &&
-              ball.y + halfB <= playerY + PADDLE_H + Math.abs(ball.vy)) {
+              ball.y + halfB <= playerY + PADDLE_H + Math.abs(ball.vy * stepMul)) {
             if (Math.abs(ball.x - g.playerX) <= halfP + halfB) {
               const hit = (ball.x - g.playerX) / halfP;
               let mult = SPEED_GROWTH;
@@ -419,7 +422,7 @@ export default function PongGame() {
           // Paddle collision — cpu (top)
           const cpuY = PADDLE_MARGIN + PADDLE_H;
           if (ball.vy < 0 && ball.y - halfB <= cpuY &&
-              ball.y - halfB >= cpuY - PADDLE_H - Math.abs(ball.vy)) {
+              ball.y - halfB >= cpuY - PADDLE_H - Math.abs(ball.vy * stepMul)) {
             if (Math.abs(ball.x - g.cpuX) <= halfP + halfB) {
               const hit = (ball.x - g.cpuX) / halfP;
               let mult = SPEED_GROWTH;
@@ -492,13 +495,10 @@ export default function PongGame() {
         }
       }
 
-      // Android: render at half rate (simulation still ran above). Halves
-      // React reconcile cost on slower devices/emulators.
-      if (Platform.OS === 'android' && (tickCount.current & 1) !== 0) return;
       setTick((t) => t + 1);
-    }, TICK_MS);
+    }, tickMs);
     return () => clearInterval(id);
-  }, [phase, area.w, area.h]);
+  }, [phase, area.w, area.h, fpsCap]);
 
   function finishRun(g: GS, won: boolean) {
     setPlayerWon(won);

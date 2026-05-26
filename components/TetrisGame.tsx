@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useTetrisStore } from '../store/tetrisStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
+import { usePerformanceStore } from '../store/performanceStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
@@ -79,7 +80,7 @@ const BoardGrid = React.memo(function BoardGrid({ cell }: { cell: number }) {
 });
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-const TICK_MS = 16;
+const BASE_SIM_FPS = 60;
 const SOFT_DROP_DIVISOR = 6; // soft drop falls this many cells per gravity tick
 const LOCK_DELAY_FRAMES = 30;
 const NEXT_QUEUE_LEN = 3;
@@ -234,6 +235,7 @@ export default function TetrisGame() {
   const coins = useCoinStore((s) => s.coins);
   const spendCoin = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
+  const fpsCap = usePerformanceStore((s) => s.fpsCap);
 
   const gsRef = useRef<GS | null>(null);
   const heldRef = useRef<{ down: boolean }>({ down: false });
@@ -265,6 +267,7 @@ export default function TetrisGame() {
     loadHighScore(); loadRuns();
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
+    usePerformanceStore.getState().load();
   }, []);
 
   // Boot the demo loop on first mount (and whenever we return to the menu).
@@ -340,42 +343,36 @@ export default function TetrisGame() {
   }, [phase]);
 
   /* ── Game loop ── */
-  // Android render-skip — see AsteroidsGame for the rationale. Tetris's
-  // locked-board layer is already memoised, but skipping React render on
-  // alternate ticks still removes a meaningful chunk of work per second.
-  const ANDROID_HALF_RENDER = Platform.OS === 'android';
-  const tickFrame = useRef(0);
   useEffect(() => {
+    const tickMs = 1000 / fpsCap;
+    const stepMul = BASE_SIM_FPS / fpsCap;
     const id = setInterval(() => {
       if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
       if (!g) return;
-      tickFrame.current++;
 
       const isDemo = phase === 'demo';
 
-      const shouldRender = !ANDROID_HALF_RENDER || (tickFrame.current & 1) === 0;
-
       // Line-clear flash: hold the cleared rows visible briefly, then collapse.
       if (g.flashTimer > 0) {
-        g.flashTimer--;
-        if (g.flashTimer === 0) {
+        g.flashTimer -= stepMul;
+        if (g.flashTimer <= 0) {
           const { board: cleaned } = clearFull(g.board);
           g.board = cleaned;
           g.flashRows = [];
           spawnNext(isDemo);
         }
-        if (shouldRender) setTick((t) => t + 1);
+        setTick((t) => t + 1);
         return;
       }
 
-      if (!g.active) { if (shouldRender) setTick((t) => t + 1); return; }
+      if (!g.active) { setTick((t) => t + 1); return; }
 
       // Demo AI: rotate toward target, slide toward target x, then drop.
       // Throttled by demoStepCD so the preview is calm and readable.
       if (isDemo) {
         if (g.demoStepCD > 0) {
-          g.demoStepCD--;
+          g.demoStepCD -= stepMul;
         } else {
           if (!g.demoTarget) g.demoTarget = pickDemoTarget(g);
           const t = g.demoTarget;
@@ -394,7 +391,7 @@ export default function TetrisGame() {
             g.active = { ...g.active, y: dropY };
             lockPiece(true);
             g.demoStepCD = DEMO_LOCK_PAUSE;
-            if (shouldRender) setTick((tt) => tt + 1);
+            setTick((tt) => tt + 1);
             return;
           }
         }
@@ -422,7 +419,7 @@ export default function TetrisGame() {
         ? Math.max(1, Math.floor(gravity / SOFT_DROP_DIVISOR))
         : gravity;
 
-      g.dropAccum++;
+      g.dropAccum += stepMul;
       if (g.dropAccum >= effective) {
         g.dropAccum = 0;
         const moved = { ...g.active, y: g.active.y + 1 };
@@ -436,15 +433,15 @@ export default function TetrisGame() {
       // Previously counted gravity cycles (very slow at low levels). Now
       // LOCK_DELAY_FRAMES × 16ms gives a consistent ~480 ms across all levels.
       if (g.active && collides(g.board, { ...g.active, y: g.active.y + 1 })) {
-        g.lockTimer++;
+        g.lockTimer += stepMul;
         if (g.lockTimer >= LOCK_DELAY_FRAMES) {
           lockPiece(isDemo);
         }
       }
-      if (shouldRender) setTick((t) => t + 1);
-    }, TICK_MS);
+      setTick((t) => t + 1);
+    }, tickMs);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, fpsCap]);
 
   function shiftQueue(g: GS): TetrominoType {
     const t = g.nextQueue.shift()!;

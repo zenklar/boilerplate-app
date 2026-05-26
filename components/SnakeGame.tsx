@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useSnakeStore } from '../store/snakeStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
+import { usePerformanceStore } from '../store/performanceStore';
 import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
@@ -16,7 +17,7 @@ import {
 // ── Board dimensions ───────────────────────────────────────────────────────
 const BOARD_W = 14;
 const BOARD_H = 25;
-const TICK_MS = 16;
+const BASE_SIM_FPS = 60;
 const SCORE_PER_FOOD = 10;
 const FOOD_PER_LEVEL = 5;
 
@@ -189,6 +190,7 @@ export default function SnakeGame() {
   const coins      = useCoinStore((s) => s.coins);
   const spendCoin  = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
+  const fpsCap = usePerformanceStore((s) => s.fpsCap);
 
   const gsRef       = useRef<GS | null>(null);
   /** Buffered directional input (max 2 queued ahead). */
@@ -198,6 +200,7 @@ export default function SnakeGame() {
     loadHighScore(); loadRuns();
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
+    usePerformanceStore.getState().load();
   }, []);
 
   // Boot the demo when returning to idle.
@@ -235,13 +238,15 @@ export default function SnakeGame() {
 
   /* ── Game loop ───────────────────────────────────────────────────────── */
   useEffect(() => {
+    const tickMs = 1000 / fpsCap;
+    const stepMul = BASE_SIM_FPS / fpsCap;
     const id = setInterval(() => {
       if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
       if (!g) return;
       const isDemo = phase === 'demo';
 
-      g.moveAccum++;
+      g.moveAccum += stepMul;
       const frames = isDemo ? DEMO_MOVE_FRAMES : MOVE_FRAMES(g.level);
       if (g.moveAccum < frames) return;
       g.moveAccum = 0;
@@ -286,9 +291,9 @@ export default function SnakeGame() {
       }
 
       setTick((t) => t + 1);
-    }, TICK_MS);
+    }, tickMs);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, fpsCap]);
 
   /* ── State helpers ───────────────────────────────────────────────────── */
   function makeInitialState(): GS {

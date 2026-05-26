@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, ToastAndroid, Platform, Alert,
@@ -16,6 +16,7 @@ import ChangePasswordModal from '../../components/modals/ChangePasswordModal';
 import LogoutModal from '../../components/modals/LogoutModal';
 import DeleteAccountModal from '../../components/modals/DeleteAccountModal';
 import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
+import { usePerformanceStore, type FpsCap } from '../../store/performanceStore';
 import { Ionicons, FontAwesome6 } from '@expo/vector-icons';
 import type { ThemeMode } from '../../theme';
 
@@ -39,6 +40,8 @@ export default function Settings() {
   const [showLogout, setShowLogout] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const fpsCap = usePerformanceStore((s) => s.fpsCap);
+  const setFpsCap = usePerformanceStore((s) => s.setFpsCap);
 
   const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'User';
   const initials = [profile?.first_name?.[0], profile?.last_name?.[0]].filter(Boolean).join('').toUpperCase() || 'U';
@@ -58,6 +61,15 @@ export default function Settings() {
     { label: 'System', value: 'system' },
     { label: 'Dark', value: 'dark' },
   ];
+  const FPS_OPTIONS: { label: string; value: FpsCap }[] = [
+    { label: '30 FPS', value: 30 },
+    { label: '60 FPS', value: 60 },
+    { label: '120 FPS', value: 120 },
+  ];
+
+  useEffect(() => {
+    usePerformanceStore.getState().load();
+  }, []);
 
   return (
     <SafeAreaView
@@ -68,7 +80,7 @@ export default function Settings() {
 
         {/* APPEARANCE SECTION */}
         <SettingsSection title="Appearance">
-          <View style={[styles.appearanceRow, { padding: 16 }]}>
+          <View style={[styles.appearanceRow, { padding: 16 }]}> 
             {APPEARANCE_OPTIONS.map((opt, i) => {
               const isActive = themeMode === opt.value;
               if (isActive) {
@@ -106,6 +118,49 @@ export default function Settings() {
               );
             })}
           </View>
+        </SettingsSection>
+
+        {/* PERFORMANCE SECTION */}
+        <SettingsSection title="Performance">
+          <View style={[styles.appearanceRow, { padding: 16 }]}> 
+            {FPS_OPTIONS.map((opt, i) => {
+              const isActive = fpsCap === opt.value;
+              if (isActive) {
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.appearanceOption, { borderRadius: theme.radius.sm, marginLeft: i > 0 ? 8 : 0, backgroundColor: theme.colors.text }]}
+                    onPress={() => setFpsCap(opt.value)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.appearanceLabel, { color: theme.colors.background, fontSize: theme.fontSize.sm }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.appearanceOption,
+                    {
+                      backgroundColor: theme.colors.backgroundSecondary,
+                      borderRadius: theme.radius.sm,
+                      marginLeft: i > 0 ? 8 : 0,
+                    },
+                  ]}
+                  onPress={() => setFpsCap(opt.value)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.appearanceLabel, { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm }]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={[styles.performanceHint, { color: theme.colors.textMuted, fontSize: theme.fontSize.xs }]}>Higher FPS is smoother but can use more battery.</Text>
         </SettingsSection>
 
         {/* ACCOUNT SECTION */}
@@ -211,5 +266,6 @@ const styles = StyleSheet.create({
   socialRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   socialBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   tiktokText: { fontSize: 14, fontWeight: '700' },
+  performanceHint: { paddingHorizontal: 16, paddingBottom: 14 },
   version: { textAlign: 'center', paddingVertical: 16 },
 });
