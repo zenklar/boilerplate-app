@@ -7,6 +7,7 @@ import { useTetrisStore } from '../store/tetrisStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
+import { fitPreview } from './game/previewFrame';
 import {
   TETROMINOS, TETROMINO_COLORS, TETROMINO_TYPES,
   TetrominoType, BOARD_W, BOARD_H, LINE_SCORE, DROP_FRAMES_PER_LEVEL,
@@ -648,22 +649,25 @@ export default function TetrisGame() {
   // space for the TETRIS title + INSERT COIN row so the falling pieces
   // sit cleanly between them instead of being covered by the overlay.
   const isDemoLayout = phase === 'idle' || phase === 'demo';
-  // Enough margin so the title (+ high score) sits clear above the board
-  // and the INSERT COIN button + hint sits clear below it.
   const demoReserveTop = 160;
   const demoReserveBottom = 150;
   const sidePanelW = isDemoLayout ? 0 : Math.min(120, area.w * 0.3);
   const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : 40;
-  // On demo / idle we target a shared 240px preview-frame width so all four
-  // arcade games look the same size on the title screen.
-  const targetW = isDemoLayout
-    ? Math.min(area.w - 48, 240)
-    : (area.w - sidePanelW - 40);
-  const maxByW = targetW / BOARD_W;
-  const maxByH = (playableH - reservedH) / BOARD_H;
+  // During demo / idle the outer frame is the shared preview box (same exact
+  // size as every other arcade title); during gameplay we let the board fill
+  // the available area normally.
+  const preview = fitPreview(area.w, playableH);
+  const maxByW = (isDemoLayout ? preview.w : area.w - sidePanelW - 40) / BOARD_W;
+  const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
-  const boardPxW = CELL * BOARD_W;
-  const boardPxH = CELL * BOARD_H;
+  const cellsW = CELL * BOARD_W;
+  const cellsH = CELL * BOARD_H;
+  // Outer frame dims: shared preview size on idle, exact cell grid on play.
+  const boardPxW = isDemoLayout ? preview.w : cellsW;
+  const boardPxH = isDemoLayout ? preview.h : cellsH;
+  // Offset so the cell grid is centred inside the preview frame.
+  const cellsOffsetX = Math.floor((boardPxW - cellsW) / 2);
+  const cellsOffsetY = Math.floor((boardPxH - cellsH) / 2);
 
   const g = gsRef.current;
   const showBoard = g && (phase === 'playing' || phase === 'gameover' || phase === 'demo');
@@ -717,6 +721,14 @@ export default function TetrisGame() {
           }}
           style={[s.board, { width: boardPxW, height: boardPxH }]}
         >
+          {/* Inner cell-grid wrapper — centred inside the outer preview
+              frame on idle (zero-offset during play). All cell-relative
+              positions are computed against THIS wrapper, not the board. */}
+          <View style={{
+            position: 'absolute',
+            left: cellsOffsetX, top: cellsOffsetY,
+            width: cellsW, height: cellsH,
+          }}>
           {/* Grid lines — 10 verticals + 20 horizontals beats 200 cells */}
           <BoardGrid cell={CELL} />
           {/* Ghost piece outline */}
@@ -749,13 +761,14 @@ export default function TetrisGame() {
                 style={{
                   position: 'absolute',
                   left: 0, top: y * CELL,
-                  width: boardPxW, height: CELL,
+                  width: cellsW, height: CELL,
                   backgroundColor: '#FFFFFF',
                   opacity: 0.55 + 0.45 * opacity,
                 }}
               />
             );
           })}
+          </View>
         </Pressable>
 
         {/* Side panel — score / level / lines / next 3. Hidden on the

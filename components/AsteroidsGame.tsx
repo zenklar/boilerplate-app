@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Polygon } from 'react-native-svg';
+import { fitPreview } from './game/previewFrame';
 import { useGameUIStore } from '../store/gameStore';
 import { useShipStore } from '../store/shipStore';
 import { useCoinStore } from '../store/coinStore';
@@ -1030,15 +1031,11 @@ export default function AsteroidsGame() {
   // so the TITLE sits cleanly above and INSERT COIN sits cleanly below.
   const isDemoLayout = (!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null;
 
-  // Demo-box dimensions — target the same 240px-wide preview frame as the
-  // other arcade titles so they all look the same on the menu.
-  const demoTargetW = Math.min(gameAreaSize.w - 48, 240);
-  const demoCell = Math.max(8, Math.floor(Math.min(
-    demoTargetW / 10,
-    (gameAreaSize.h - 310) / 20,
-  )));
-  const demoBoardPxW = demoCell * 10;
-  const demoBoardPxH = demoCell * 20;
+  // Demo-box dimensions — shared with Tetris / Snake / Pong via previewFrame.ts
+  // so every arcade title shows the same-sized preview on the menu.
+  const preview = fitPreview(gameAreaSize.w, gameAreaSize.h);
+  const demoBoardPxW = preview.w;
+  const demoBoardPxH = preview.h;
 
   return (
     <View ref={rootRef} style={s.root}>
@@ -1423,7 +1420,8 @@ const s = StyleSheet.create({
   gameArea: { flex: 1 },
   canvas: { flex: 1, overflow: 'hidden' },
   canvasDemo: {
-    borderWidth: 1,
+    backgroundColor: '#050505',
+    borderWidth: 2,
     borderColor: '#222',
     overflow: 'hidden',
   },

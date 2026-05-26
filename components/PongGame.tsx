@@ -8,6 +8,7 @@ import { usePongStore, PongRun } from '../store/pongStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
+import { fitPreview } from './game/previewFrame';
 import {
   playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed, playShoot,
 } from '../utils/sounds';
@@ -555,20 +556,26 @@ export default function PongGame() {
 
   const isDemoLayout = phase === 'idle' || phase === 'demo';
 
-  // Frame sized to fit, keeping a tall portrait aspect. In demo/idle we
-  // reserve space top + bottom for the title and INSERT COIN so the play
-  // frame is the same size you'd see across other arcade games.
+  // Frame sized to fit. On the title / demo screen the frame uses the
+  // SHARED preview size so all four arcade games show an identical box.
+  // During gameplay we use the natural FRAME_RATIO so the playfield matches
+  // the web version's aspect.
   const playableH = area.h - CTRL_H;
-  const reserved  = isDemoLayout ? (DEMO_RESERVE_TOP + DEMO_RESERVE_BOTTOM) : 16;
-  // Cap the demo preview to 240px wide so all four arcade titles show a
-  // similarly-sized frame on the menu. Active gameplay uses the full width.
-  const maxW = isDemoLayout ? Math.min(area.w - 48, 240) : area.w - 16;
-  const maxH = playableH - reserved;
-  let frameW = maxW;
-  let frameH = frameW / FRAME_RATIO;
-  if (frameH > maxH) { frameH = maxH; frameW = frameH * FRAME_RATIO; }
-  frameW = Math.floor(frameW);
-  frameH = Math.floor(frameH);
+  let frameW: number;
+  let frameH: number;
+  if (isDemoLayout) {
+    const preview = fitPreview(area.w, playableH);
+    frameW = preview.w;
+    frameH = preview.h;
+  } else {
+    const maxW = area.w - 16;
+    const maxH = playableH - 16;
+    frameW = maxW;
+    frameH = frameW / FRAME_RATIO;
+    if (frameH > maxH) { frameH = maxH; frameW = frameH * FRAME_RATIO; }
+    frameW = Math.floor(frameW);
+    frameH = Math.floor(frameH);
+  }
   frameRef.current = { w: frameW, h: frameH };
 
   const g = gsRef.current;

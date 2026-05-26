@@ -7,6 +7,7 @@ import { useSnakeStore } from '../store/snakeStore';
 import { useCoinStore } from '../store/coinStore';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import ArcadeCoin from './ArcadeCoin';
+import { fitPreview } from './game/previewFrame';
 import {
   playShoot, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed,
 } from '../utils/sounds';
@@ -387,13 +388,19 @@ export default function SnakeGame() {
   const demoReserveBottom = 150;
   const playableH  = area.h - CTRL_H;
   const reservedH  = isDemoLayout ? demoReserveTop + demoReserveBottom : 60;
-  // Match the other arcade titles: 240px preview-frame width on idle.
-  const targetW    = isDemoLayout ? Math.min(area.w - 48, 240) : (area.w - 24);
-  const maxByW     = targetW / BOARD_W;
-  const maxByH     = (playableH - reservedH) / BOARD_H;
+  // Demo / idle uses the shared preview-frame size (same on every game);
+  // gameplay uses the natural cell grid filling the available area.
+  const preview = fitPreview(area.w, playableH);
+  const maxByW = (isDemoLayout ? preview.w : area.w - 24) / BOARD_W;
+  const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL       = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
-  const boardPxW   = CELL * BOARD_W;
-  const boardPxH   = CELL * BOARD_H;
+  const cellsW     = CELL * BOARD_W;
+  const cellsH     = CELL * BOARD_H;
+  // Outer board: shared preview size on idle, exact cell grid on play.
+  const boardPxW   = isDemoLayout ? preview.w : cellsW;
+  const boardPxH   = isDemoLayout ? preview.h : cellsH;
+  const cellsOffsetX = Math.floor((boardPxW - cellsW) / 2);
+  const cellsOffsetY = Math.floor((boardPxH - cellsH) / 2);
 
   const g         = gsRef.current;
   const showBoard = !!(g && (phase === 'playing' || phase === 'gameover' || phase === 'demo'));
@@ -434,17 +441,25 @@ export default function SnakeGame() {
         {/* Board */}
         <View style={[s.board, { width: boardPxW, height: boardPxH }]}>
 
+          {/* Inner cell-grid wrapper — centred inside the outer preview
+              frame on idle (zero offset during play). */}
+          <View style={{
+            position: 'absolute',
+            left: cellsOffsetX, top: cellsOffsetY,
+            width: cellsW, height: cellsH,
+          }}>
+
           {/* Grid lines */}
           {Array.from({ length: BOARD_W - 1 }, (_, i) => (
             <View key={`v${i}`} style={{
               position: 'absolute', left: (i + 1) * CELL, top: 0,
-              width: 1, height: boardPxH, backgroundColor: '#101010',
+              width: 1, height: cellsH, backgroundColor: '#101010',
             }} />
           ))}
           {Array.from({ length: BOARD_H - 1 }, (_, i) => (
             <View key={`h${i}`} style={{
               position: 'absolute', top: (i + 1) * CELL, left: 0,
-              height: 1, width: boardPxW, backgroundColor: '#101010',
+              height: 1, width: cellsW, backgroundColor: '#101010',
             }} />
           ))}
 
@@ -469,6 +484,7 @@ export default function SnakeGame() {
               <SnakeCell size={CELL} isHead={i === 0} />
             </View>
           ))}
+          </View>
         </View>
       </View>
 
