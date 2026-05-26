@@ -653,8 +653,13 @@ export default function TetrisGame() {
   const demoReserveTop = 160;
   const demoReserveBottom = 150;
   const sidePanelW = isDemoLayout ? 0 : Math.min(120, area.w * 0.3);
-  const maxByW = (area.w - sidePanelW - (isDemoLayout ? 24 : 40)) / BOARD_W;
   const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : 40;
+  // On demo / idle we target a shared 240px preview-frame width so all four
+  // arcade games look the same size on the title screen.
+  const targetW = isDemoLayout
+    ? Math.min(area.w - 48, 240)
+    : (area.w - sidePanelW - 40);
+  const maxByW = targetW / BOARD_W;
   const maxByH = (playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
   const boardPxW = CELL * BOARD_W;
@@ -804,11 +809,9 @@ export default function TetrisGame() {
         <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>TETRIS</Text>
-            {highScore > 0 && (
-              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                HIGH SCORE   {highScore}
-              </Text>
-            )}
+            <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+              HIGH SCORE   {highScore}
+            </Text>
           </View>
           <View style={s.overlayBottom} pointerEvents="box-none">
             <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
@@ -816,11 +819,11 @@ export default function TetrisGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            {Platform.OS === 'web' && (
-              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                Mouse  move · Click  rotate · ↓  soft drop · Space  hard drop
-              </Text>
-            )}
+            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+              {Platform.OS === 'web'
+                ? 'Mouse  move · Click  rotate · ↓  soft drop · Space  hard drop'
+                : 'Drag to move · tap to rotate · DROP button to slam'}
+            </Text>
           </View>
         </>
       )}

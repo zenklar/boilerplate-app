@@ -384,11 +384,12 @@ export default function SnakeGame() {
 
   const isDemoLayout = phase === 'idle' || phase === 'demo';
   const demoReserveTop    = 160;
-  const demoReserveBottom = 140;
+  const demoReserveBottom = 150;
   const playableH  = area.h - CTRL_H;
   const reservedH  = isDemoLayout ? demoReserveTop + demoReserveBottom : 60;
-  // 15×25 board is portrait like Tetris — height naturally constrains cell size.
-  const maxByW     = (area.w - 24) / BOARD_W;
+  // Match the other arcade titles: 240px preview-frame width on idle.
+  const targetW    = isDemoLayout ? Math.min(area.w - 48, 240) : (area.w - 24);
+  const maxByW     = targetW / BOARD_W;
   const maxByH     = (playableH - reservedH) / BOARD_H;
   const CELL       = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
   const boardPxW   = CELL * BOARD_W;
@@ -476,11 +477,9 @@ export default function SnakeGame() {
         <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>SNAKE</Text>
-            {highScore > 0 && (
-              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                HIGH SCORE   {highScore}
-              </Text>
-            )}
+            <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+              HIGH SCORE   {highScore}
+            </Text>
           </View>
           <View style={s.overlayBottom} pointerEvents="box-none">
             <Pressable
@@ -491,11 +490,11 @@ export default function SnakeGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            {Platform.OS === 'web' && (
-              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                Arrow Keys  ·  WASD  to steer
-              </Text>
-            )}
+            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+              {Platform.OS === 'web'
+                ? 'Arrow Keys  ·  WASD  to steer'
+                : 'Tap arrows to steer'}
+            </Text>
           </View>
         </>
       )}

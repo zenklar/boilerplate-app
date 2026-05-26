@@ -951,7 +951,12 @@ export default function AsteroidsGame() {
   /* ── Layout handler ── */
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    const gameH = Math.max(1, height - CTRL_H);
+    // Reserve space for the mobile joystick/fire bar only when we're actually
+    // about to render them — i.e. during gameplay. In demo / idle the bar is
+    // hidden, so the game world should use the full canvas height (otherwise
+    // the ship is rendered at the upper half of the preview frame).
+    const reserveBottom = isDemoLayout ? 0 : CTRL_H;
+    const gameH = Math.max(1, height - reserveBottom);
     dimRef.current = { w: width, h: gameH };
     setArea({ w: width, h: height });
 
@@ -1025,9 +1030,11 @@ export default function AsteroidsGame() {
   // so the TITLE sits cleanly above and INSERT COIN sits cleanly below.
   const isDemoLayout = (!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null;
 
-  // Demo-box dimensions — identical formula to TetrisGame so both previews are the same size
+  // Demo-box dimensions — target the same 240px-wide preview frame as the
+  // other arcade titles so they all look the same on the menu.
+  const demoTargetW = Math.min(gameAreaSize.w - 48, 240);
   const demoCell = Math.max(8, Math.floor(Math.min(
-    (gameAreaSize.w - 24) / 10,
+    demoTargetW / 10,
     (gameAreaSize.h - 310) / 20,
   )));
   const demoBoardPxW = demoCell * 10;
@@ -1388,11 +1395,9 @@ export default function AsteroidsGame() {
         <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
-            {highScore > 0 && (
-              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                HIGH SCORE   {highScore}
-              </Text>
-            )}
+            <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+              HIGH SCORE   {highScore}
+            </Text>
           </View>
           <View style={s.overlayBottom} pointerEvents="box-none">
             <Pressable onPress={handleInsertCoin} style={[s.menuBtn, coins === 0 && s.menuBtnNoCoins]}>
@@ -1400,11 +1405,11 @@ export default function AsteroidsGame() {
                 {coins > 0 ? 'INSERT COIN' : 'GET COINS'}
               </Text>
             </Pressable>
-            {Platform.OS === 'web' && (
-              <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
-                Mouse aim · LMB thrust · Space to fire
-              </Text>
-            )}
+            <Text style={[s.webIdleHint, { fontFamily: MONO }]}>
+              {Platform.OS === 'web'
+                ? 'Mouse aim · LMB thrust · Space to fire'
+                : 'Joystick to fly · tap FIRE to shoot'}
+            </Text>
           </View>
         </>
       )}

@@ -55,8 +55,9 @@ const ELECTRICITY_WALL_BOOST = 1.20;
 
 // Demo/idle layout: reserve space top + bottom so the play frame matches the
 // preview size used by other games (the frame must NOT fill the whole area).
-const DEMO_RESERVE_TOP = 150;
-const DEMO_RESERVE_BOTTOM = 130;
+// Match the other arcade titles so all four idle screens align identically.
+const DEMO_RESERVE_TOP = 160;
+const DEMO_RESERVE_BOTTOM = 150;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
@@ -559,7 +560,9 @@ export default function PongGame() {
   // frame is the same size you'd see across other arcade games.
   const playableH = area.h - CTRL_H;
   const reserved  = isDemoLayout ? (DEMO_RESERVE_TOP + DEMO_RESERVE_BOTTOM) : 16;
-  const maxW = area.w - 16;
+  // Cap the demo preview to 240px wide so all four arcade titles show a
+  // similarly-sized frame on the menu. Active gameplay uses the full width.
+  const maxW = isDemoLayout ? Math.min(area.w - 48, 240) : area.w - 16;
   const maxH = playableH - reserved;
   let frameW = maxW;
   let frameH = frameW / FRAME_RATIO;
@@ -817,11 +820,9 @@ export default function PongGame() {
         <>
           <View style={[s.overlayTop, { height: DEMO_RESERVE_TOP }]} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>PONG</Text>
-            {highScore > 0 && (
-              <Text style={[s.hiLabel, { fontFamily: MONO }]}>
-                HIGH SCORE   {highScore}
-              </Text>
-            )}
+            <Text style={[s.hiLabel, { fontFamily: MONO }]}>
+              HIGH SCORE   {highScore}
+            </Text>
           </View>
           <View style={[s.overlayBottom, { height: DEMO_RESERVE_BOTTOM }]} pointerEvents="box-none">
             <Pressable
