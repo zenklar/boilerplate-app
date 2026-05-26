@@ -45,6 +45,11 @@ const CTRL_H = Platform.OS === 'web' ? 0 : 140;
 const JOY_MAX = 52;
 const JOY_THUMB_R = 24;
 const JOY_DEAD = JOY_MAX * 0.18;
+const IS_NATIVE = Platform.OS !== 'web';
+const DEBRIS_COUNT_SCALE = IS_NATIVE ? 0.45 : 1;
+const DEBRIS_LIFE_SCALE = IS_NATIVE ? 0.65 : 1;
+const MOBILE_SPLIT_ASTEROID_CAP = 14;
+const MOBILE_SHOOT_SFX_EVERY = 2;
 
 const PARTICLE_MAX_LIFE = 16;
 const PARTICLE_SPAWN = 2;
@@ -82,7 +87,7 @@ const enemyAimSpreadForLevel = (lvl: number): number =>
   Math.max(0.08, 0.35 - (lvl - ENEMY_FIRST_LEVEL) * 0.025);
 
 type Size = 'large' | 'medium' | 'small';
-type Phase = 'idle' | 'demo' | 'intro' | 'playing' | 'gameover';
+type Phase = 'idle' | 'demo' | 'playing' | 'gameover';
 
 interface Asteroid {
   id: number;
@@ -95,6 +100,7 @@ interface Asteroid {
   pts: string;
 }
 interface Bullet {
+  id: number;
   x: number; y: number; vx: number; vy: number; life: number;
   // Velocity is fixed at creation, so cache the rotation in degrees once.
   angle: number;
@@ -290,7 +296,6 @@ export default function AsteroidsGame() {
   const ctrl = useRef({ left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 });
   const frame = useRef(0);
   const pendingStart = useRef(false);
-  const pendingFlyInTicks = useRef<number | undefined>(undefined);
   // Web mouse aim
   const rootRef = useRef<View>(null);
   const canvasOrigin = useRef({ x: 0, y: 0 });
@@ -301,17 +306,22 @@ export default function AsteroidsGame() {
   // Multitouch tracking: each control zone independently tracks its own touch identifier
   const joyTouchId = useRef<number | null>(null);
   const fireActive = useRef(false);
+  const mobileShootSfxGate = useRef(MOBILE_SHOOT_SFX_EVERY - 1);
   // joyZone page-space origin measured via measureInWindow so touch pageX/Y can be
   // converted to joyZone-local coords reliably (changedTouches.locationX/Y are relative
   // to the child element that was touched, not the zone View, causing jumping).
   const joyZoneRef = useRef<View>(null);
   const joyOrigin = useRef({ x: 0, y: 0 });
+  const effectsBudgetRef = useRef(1);
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
+  const isShellGamePlaying = useGameUIStore((s) => s.isGamePlaying);
   const coins    = useCoinStore((s) => s.coins);
   const spendCoin = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const fpsCap = usePerformanceStore((s) => s.fpsCap);
+  const effectsBudget = usePerformanceStore((s) => s.adaptiveEffectsBudget);
+  const setAdaptiveEffectsBudget = usePerformanceStore((s) => s.setAdaptiveEffectsBudget);
 
   /* ── Load persisted state ── */
   useEffect(() => {
@@ -322,6 +332,21 @@ export default function AsteroidsGame() {
     useSubscriptionStore.getState().loadSubscription();
     useEnemyCodexStore.getState().load();
     usePerformanceStore.getState().load();
+  }, []);
+
+  useEffect(() => {
+    effectsBudgetRef.current = effectsBudget;
+  }, [effectsBudget]);
+
+  // Safety net: if the screen unmounts while thrust is active, guarantee we
+  // tear down the looping audio player so it cannot keep running in background.
+  useEffect(() => {
+    return () => {
+      if (thrustSoundRef.current) {
+        thrustSoundRef.current.stop();
+        thrustSoundRef.current = null;
+      }
+    };
   }, []);
 
   /* ── Web keyboard + mouse controls ── */
@@ -403,7 +428,6 @@ export default function AsteroidsGame() {
   // Keep simulation fixed at 60 Hz for stable gameplay pacing, but drive it
   // from requestAnimationFrame so web/native present timing is smoother.
   // Lower particle caps reduce JS+layout pressure during heavy combat.
-  const MAX_PARTICLES = Platform.OS === 'web' ? 120 : 90;
   useEffect(() => {
     const simFps = fpsCap;
     const simStepMs = 1000 / simFps;
@@ -412,60 +436,30 @@ export default function AsteroidsGame() {
     let rafId = 0;
     let lastTs = 0;
     let accMs = 0;
+    let budgetSampleMs = 0;
     const MAX_ACCUM_MS = simStepMs * 4;
 
-    const step = () => {
+    const scoreBudgetFromFrame = (frameMs: number) => {
+      const ratio = frameMs / simStepMs;
+      if (ratio <= 1.05) return 1;
+      if (ratio <= 1.2) return 0.85;
+      if (ratio <= 1.45) return 0.65;
+      return 0.45;
+    };
+
+    const step = (): boolean => {
       const { w: W, h: H } = dimRef.current;
-      if (!W || !H) { setTick((t) => t + 1); return; }
+      if (!W || !H) return false;
 
       const g = gsRef.current;
 
-      /* ── Intro: ship flies in from below, no asteroids yet ── */
-      if (g?.phase === 'intro') {
-        g.sy += g.svy * stepMul;
-        g.sx = wrap(g.sx + g.svx * stepMul, W);
-        // Thrust particles while flying up
-        const exhaustAngle = toR(g.sAngle + 90);
-        const ex = g.sx + Math.cos(exhaustAngle) * (SHIP_SIZE / 2);
-        const ey = g.sy + Math.sin(exhaustAngle) * (SHIP_SIZE / 2);
-        for (let i = 0; i < PARTICLE_SPAWN + 1; i++) {
-          const spread = rand(-PARTICLE_SPREAD, PARTICLE_SPREAD);
-          const pDir = exhaustAngle + spread;
-          const pSpd = rand(1.4, 3.2);
-          g.particles.push({
-            id: uid(), x: ex + rand(-3, 3), y: ey + rand(-3, 3),
-            vx: Math.cos(pDir) * pSpd, vy: Math.sin(pDir) * pSpd,
-            life: 22, maxLife: 22, size: rand(2, 4.5), kind: 'thrust',
-          });
-        }
-        for (let i = g.particles.length - 1; i >= 0; i--) {
-          const p = g.particles[i];
-          p.x += p.vx * stepMul;
-          p.y += p.vy * stepMul;
-          p.life -= stepMul;
-          p.size *= Math.pow(0.92, stepMul);
-          if (p.life <= 0) g.particles.splice(i, 1);
-        }
-        // Reached center — hand off to playing
-        if (g.sy <= H / 2) {
-          g.sy = H / 2; g.svx = 0; g.svy = 0;
-          g.sInv = 0;
-          g.phase = 'playing';
-          g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
-          g.startTime = Date.now();
-          if (thrustSoundRef.current) {
-            thrustSoundRef.current.stop(); thrustSoundRef.current = null;
-          }
-        }
-        setTick((t) => t + 1);
-        return;
-      }
-
-      if (!g || (g.phase !== 'playing' && g.phase !== 'demo')) { setTick((t) => t + 1); return; }
+      if (!g || (g.phase !== 'playing' && g.phase !== 'demo')) return false;
 
       const isDemo = g.phase === 'demo';
       frame.current += stepMul;
       const c = ctrl.current;
+      const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+      const shotSfxCadence = effectsScale >= 0.85 ? MOBILE_SHOOT_SFX_EVERY : effectsScale >= 0.65 ? 3 : 4;
 
       /* Demo: AI controls the ship (sets sAngle directly + ctrl.fire) */
       if (isDemo) runDemoAI(g, c);
@@ -506,7 +500,7 @@ export default function AsteroidsGame() {
         const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
         const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
         // Scale particle count with thrust power so gentle pushes emit fewer sparks
-        const spawnBudget = PARTICLE_SPAWN * c.thrustPower * stepMul;
+        const spawnBudget = PARTICLE_SPAWN * c.thrustPower * stepMul * effectsScale;
         const particleCount = Math.floor(spawnBudget) + (Math.random() < (spawnBudget % 1) ? 1 : 0);
         for (let i = 0; i < particleCount; i++) {
           const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
@@ -550,6 +544,7 @@ export default function AsteroidsGame() {
         const bvx = Math.cos(r) * BULLET_SPEED + g.svx;
         const bvy = Math.sin(r) * BULLET_SPEED + g.svy;
         g.bullets.push({
+          id: uid(),
           x: g.sx + Math.cos(r) * tip,
           y: g.sy + Math.sin(r) * tip,
           vx: bvx, vy: bvy,
@@ -558,7 +553,14 @@ export default function AsteroidsGame() {
         });
         c.fireCD = FIRE_CD;
         g.bulletsShot++;
-        if (!isDemo) playShoot();
+        if (!isDemo) {
+          if (Platform.OS === 'web') {
+            playShoot();
+          } else {
+            mobileShootSfxGate.current = (mobileShootSfxGate.current + 1) % shotSfxCadence;
+            if (mobileShootSfxGate.current === 0) playShoot();
+          }
+        }
       }
       if (c.fireCD > 0) c.fireCD -= stepMul;
 
@@ -603,12 +605,13 @@ export default function AsteroidsGame() {
             g.score += SCORE_MAP[a.size];
             g.asteroidsDestroyed++;
             // Debris burst — more particles, bigger, faster, longer-lived
-            const numDebris = a.size === 'large' ? 14 : a.size === 'medium' ? 9 : 5;
+            const baseDebris = a.size === 'large' ? 14 : a.size === 'medium' ? 9 : 5;
+            const numDebris = Math.max(1, Math.round(baseDebris * DEBRIS_COUNT_SCALE * effectsScale));
             const maxSpd = a.size === 'large' ? 5.5 : a.size === 'medium' ? 4.0 : 3.0;
             for (let di = 0; di < numDebris; di++) {
               const dDir = rand(0, Math.PI * 2);
               const dSpd = rand(0.8, maxSpd);
-              const dLife = Math.round(rand(24, 42));
+              const dLife = Math.max(8, Math.round(rand(24, 42) * DEBRIS_LIFE_SCALE * effectsScale));
               g.particles.push({
                 id: uid(), x: a.x, y: a.y,
                 vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
@@ -617,18 +620,26 @@ export default function AsteroidsGame() {
               });
             }
             if (!isDemo) playExplosion(a.size);
+            const splitLimit = Math.max(8, Math.round(MOBILE_SPLIT_ASTEROID_CAP * effectsScale));
+            const splitCount = IS_NATIVE && g.asteroids.length >= splitLimit ? 1 : 2;
             if (a.size === 'large') {
-              born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
-              born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
+              for (let si = 0; si < splitCount; si++) {
+                born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
+              }
             } else if (a.size === 'medium') {
-              born.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
-              born.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
+              for (let si = 0; si < splitCount; si++) {
+                born.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
+              }
             }
           }
         }
       }
-      g.asteroids = [...g.asteroids.filter((a) => !deadA.has(a.id)), ...born];
-      g.bullets = g.bullets.filter((_, i) => !deadB.has(i));
+      if (deadA.size > 0 || born.length > 0) {
+        g.asteroids = [...g.asteroids.filter((a) => !deadA.has(a.id)), ...born];
+      }
+      if (deadB.size > 0) {
+        g.bullets = g.bullets.filter((_, i) => !deadB.has(i));
+      }
 
       /* Enemy saucers — drift around, turn to face player, fire forward */
       const ENEMY_ROT_SPD = 2.5; // degrees per tick — slower than the player
@@ -694,13 +705,16 @@ export default function AsteroidsGame() {
               astroBorn.push(mkAsteroid(W, H, 'small', undefined, undefined, a.x, a.y));
             }
             // Small dust puff so the deflection is visible
-            for (let k = 0; k < 6; k++) {
+            const enemyDeflectDebris = Math.max(1, Math.round(6 * DEBRIS_COUNT_SCALE * effectsScale));
+            for (let k = 0; k < enemyDeflectDebris; k++) {
               const dDir = rand(0, Math.PI * 2);
               const dSpd = rand(0.6, 2.2);
               g.particles.push({
                 id: uid(), x: a.x, y: a.y,
                 vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
-                life: 18, maxLife: 18, size: rand(2, 4), kind: 'debris',
+                life: Math.max(8, Math.round(18 * DEBRIS_LIFE_SCALE * effectsScale)),
+                maxLife: Math.max(8, Math.round(18 * DEBRIS_LIFE_SCALE * effectsScale)),
+                size: rand(2, 4), kind: 'debris',
               });
             }
           }
@@ -734,23 +748,27 @@ export default function AsteroidsGame() {
           if (d2(b.x, b.y, e.x, e.y) < (ENEMY_RADIUS + 4) ** 2) {
             pbConsumed.add(bi);
             e.hp--;
-            for (let k = 0; k < 6; k++) {
+            const enemyHitDebris = Math.max(1, Math.round(6 * DEBRIS_COUNT_SCALE * effectsScale));
+            for (let k = 0; k < enemyHitDebris; k++) {
               const dDir = rand(0, Math.PI * 2);
               const dSpd = rand(0.8, 2.5);
               g.particles.push({
                 id: uid(), x: e.x, y: e.y,
                 vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
-                life: 18, maxLife: 18, size: rand(1.5, 3), kind: 'debris',
+                life: Math.max(8, Math.round(18 * DEBRIS_LIFE_SCALE * effectsScale)),
+                maxLife: Math.max(8, Math.round(18 * DEBRIS_LIFE_SCALE * effectsScale)),
+                size: rand(1.5, 3), kind: 'debris',
               });
             }
             if (e.hp <= 0) {
               enemyDead.add(e.id);
               g.score += ENEMY_SCORE;
               useEnemyCodexStore.getState().markKilled(e.designId);
-              for (let k = 0; k < 14; k++) {
+              const enemyDeathDebris = Math.max(2, Math.round(14 * DEBRIS_COUNT_SCALE * effectsScale));
+              for (let k = 0; k < enemyDeathDebris; k++) {
                 const dDir = rand(0, Math.PI * 2);
                 const dSpd = rand(1, 4.5);
-                const dLife = Math.round(rand(26, 44));
+                const dLife = Math.max(10, Math.round(rand(26, 44) * DEBRIS_LIFE_SCALE * effectsScale));
                 g.particles.push({
                   id: uid(), x: e.x, y: e.y,
                   vx: Math.cos(dDir) * dSpd, vy: Math.sin(dDir) * dSpd,
@@ -762,8 +780,12 @@ export default function AsteroidsGame() {
           }
         }
       }
-      g.enemies = g.enemies.filter((e) => !enemyDead.has(e.id));
-      g.bullets = g.bullets.filter((_, i) => !pbConsumed.has(i));
+      if (enemyDead.size > 0) {
+        g.enemies = g.enemies.filter((e) => !enemyDead.has(e.id));
+      }
+      if (pbConsumed.size > 0) {
+        g.bullets = g.bullets.filter((_, i) => !pbConsumed.has(i));
+      }
 
       /* Local death handler — used by both asteroid and enemy-bullet collisions */
       const killPlayer = () => {
@@ -839,22 +861,31 @@ export default function AsteroidsGame() {
 
       // Trim oversized particle pools (Android cap). Drop the oldest first so
       // the visual fade-out is uninterrupted.
-      if (g.particles.length > MAX_PARTICLES) {
-        g.particles.splice(0, g.particles.length - MAX_PARTICLES);
+      const maxParticles = Platform.OS === 'web' ? 120 : Math.max(36, Math.round(90 * effectsScale));
+      if (g.particles.length > maxParticles) {
+        g.particles.splice(0, g.particles.length - maxParticles);
       }
-
-      setTick((t) => t + 1);
+      return true;
     };
 
     const loop = (ts: number) => {
       if (lastTs === 0) lastTs = ts;
       const dt = Math.min(50, ts - lastTs);
       lastTs = ts;
+      budgetSampleMs += dt;
+      if (budgetSampleMs >= 250) {
+        budgetSampleMs = 0;
+        setAdaptiveEffectsBudget(scoreBudgetFromFrame(dt));
+      }
       accMs = Math.min(MAX_ACCUM_MS, accMs + dt);
+      let didStep = false;
       while (accMs >= simStepMs) {
-        step();
+        didStep = step() || didStep;
         accMs -= simStepMs;
       }
+      // Render at most once per animation frame, even if we had to catch up
+      // multiple simulation steps during a long frame.
+      if (didStep) setTick((t) => t + 1);
       rafId = requestAnimationFrame(loop);
     };
 
@@ -863,25 +894,15 @@ export default function AsteroidsGame() {
     return () => cancelAnimationFrame(rafId);
   }, [fpsCap]); // single rAF loop, always reads current refs
 
-  /* ── Init or restart game with given dimensions ──
-   * If flyInTicks is provided, the ship starts at the bottom of the visible
-   * area and travels to center over that many game ticks (used so the fly-in
-   * lines up with the 3-2-1-GO countdown). Otherwise it uses the default
-   * fast fly-in from below the screen. */
-  const initNewGame = (W: number, H: number, flyInTicks?: number) => {
+  /* ── Init or restart game with given dimensions ── */
+  const initNewGame = (W: number, H: number) => {
     setNewHS(false);
-    // Start thrust sound for intro fly-in
-    if (!thrustSoundRef.current) {
-      thrustSoundRef.current = playThrustStart();
-    }
-    const startSy = flyInTicks ? H - SHIP_SIZE * 1.2 : H + SHIP_SIZE * 2;
-    const svy = flyInTicks ? -((startSy - H / 2) / flyInTicks) : -5;
     gsRef.current = {
-      phase: 'intro',
-      sx: W / 2, sy: startSy,
-      svx: 0, svy,
+      phase: 'playing',
+      sx: W / 2, sy: H / 2,
+      svx: 0, svy: 0,
       sAngle: 0, sInv: 0,
-      bullets: [], particles: [], asteroids: [], enemies: [], enemyBullets: [],
+      bullets: [], particles: [], asteroids: mkLevel(1, W, H, W / 2, H / 2), enemies: [], enemyBullets: [],
       score: 0, lives: 3, level: 1,
       bulletsShot: 0, asteroidsDestroyed: 0, startTime: Date.now(),
     };
@@ -889,16 +910,15 @@ export default function AsteroidsGame() {
   };
 
   /* ── Start game ── */
-  const handleStartGame = (flyInTicks?: number) => {
+  const handleStartGame = () => {
     const alreadyFullscreen = useGameUIStore.getState().isGamePlaying;
     if (alreadyFullscreen) {
       // Layout unchanged (play again from game-over): use current dims directly
       const { w: W, h: H } = dimRef.current;
-      if (W > 0 && H > 0) initNewGame(W, H, flyInTicks);
+      if (W > 0 && H > 0) initNewGame(W, H);
     } else {
       // Idle → playing: hiding header/nav changes layout, wait for onLayout
       pendingStart.current = true;
-      pendingFlyInTicks.current = flyInTicks;
       setIsGamePlaying(true);
     }
   };
@@ -976,25 +996,14 @@ export default function AsteroidsGame() {
       } else if (n === 1) {
         setTimeout(() => runCountdown(0), 80); // "GO!"
       } else {
-        // Done — clear overlay. The intro fly-in started at countdown begin and
-        // should be arriving at center now; if for any reason it hasn't, snap.
+        // Done — clear overlay and start gameplay now (lighter startup path).
         setTimeout(() => {
           setInsertPhase(null);
-          const g = gsRef.current;
-          if (g && g.phase === 'intro') {
-            const { w: W, h: H } = dimRef.current;
-            g.sy = H / 2; g.svx = 0; g.svy = 0; g.sInv = 0;
-            g.phase = 'playing';
-            g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
-            g.startTime = Date.now();
-            if (thrustSoundRef.current) {
-              thrustSoundRef.current.stop(); thrustSoundRef.current = null;
-            }
-          }
+          handleStartGame();
         }, 120);
       }
     });
-  }, []);
+  }, [handleStartGame]);
 
   /* ── Coin animation then countdown ── */
   const runCoinAnimation = useCallback(() => {
@@ -1015,10 +1024,6 @@ export default function AsteroidsGame() {
         Animated.timing(coinOpacity, { toValue: 0,   duration: 80,  useNativeDriver: Platform.OS !== 'web' }),
       ]).start(() => {
         setInsertPhase('countdown');
-        // Start the ship fly-in NOW so it arrives at center as "GO" fires.
-        // Countdown spans ~2.7s ≈ 170 game ticks (16ms each); use 165 to give
-        // a small buffer so the ship lands just before the overlay clears.
-        handleStartGame(165);
         runCountdown(3);
       });
     });
@@ -1069,9 +1074,7 @@ export default function AsteroidsGame() {
 
     if (pendingStart.current && measuredW > 0 && measuredH > 0) {
       pendingStart.current = false;
-      const ft = pendingFlyInTicks.current;
-      pendingFlyInTicks.current = undefined;
-      initNewGame(measuredW, gameH, ft);
+      initNewGame(measuredW, gameH);
     } else if (!gsRef.current && measuredW > 0 && measuredH > 0) {
       const sx = measuredW / 2, sy = gameH / 2;
       gsRef.current = {
@@ -1114,7 +1117,9 @@ export default function AsteroidsGame() {
   // Title-screen "boxed preview" treatment — same idea as the Tetris demo:
   // the simulation runs inside a bordered area in the middle of the screen
   // so the TITLE sits cleanly above and INSERT COIN sits cleanly below.
-  const isDemoLayout = (!g || g.phase === 'idle' || g.phase === 'demo') && insertPhase === null;
+  const isDemoLayout =
+    (!isShellGamePlaying && (!g || g.phase === 'idle' || g.phase === 'demo')) &&
+    insertPhase === null;
 
   // Demo-box dimensions — shared with Tetris / Snake / Pong via previewFrame.ts
   // so every arcade title shows the same-sized preview on the menu.
@@ -1228,9 +1233,9 @@ export default function AsteroidsGame() {
         })}
 
         {/* Bullets — during active play or demo (green laser bolts) */}
-        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b, i) => (
+        {(g?.phase === 'playing' || g?.phase === 'demo') && g.bullets.map((b) => (
           <View
-            key={i}
+            key={`b-${b.id}`}
             style={[
               s.bullet,
               { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${b.angle}deg` }] },
@@ -1310,7 +1315,7 @@ export default function AsteroidsGame() {
         ))}
 
         {/* Particles (thruster = white→blue, debris = bright white→gray→fade) */}
-        {(g?.phase === 'playing' || g?.phase === 'intro' || g?.phase === 'demo') && g.particles.map((p, i) => {
+        {(g?.phase === 'playing' || g?.phase === 'demo') && g.particles.map((p, i) => {
           const t = p.life / p.maxLife;
           let rgb: string;
           let opacity: number;
@@ -1343,7 +1348,7 @@ export default function AsteroidsGame() {
         })}
 
         {/* Ship — rendered on top of particles */}
-        {g && (g.phase === 'playing' || g.phase === 'intro' || g.phase === 'demo') && (g.phase === 'intro' || shipVisible) && (
+        {g && (g.phase === 'playing' || g.phase === 'demo') && shipVisible && (
           <View style={{
             position: 'absolute',
             left: g.sx - SHIP_SIZE / 2,
@@ -1629,24 +1634,27 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // Note: on Android, per-frame shadowRadius re-rasterizes the bullet sprite
-  // every tick — extremely expensive with many bullets in flight. iOS and web
-  // handle this fine, so we keep the glow there.
+  // Keep bullet glow on web only. Native shadow/glow on many fast-moving
+  // bullets can be a major perf cost, especially on mid-range phones.
   bullet: {
     position: 'absolute',
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#7FE3FF',
-    ...(Platform.OS === 'android' ? {} : {
-      boxShadow: '0px 0px 6px rgba(127, 227, 255, 1)',
-    }),
+    ...(Platform.OS === 'web'
+      ? {
+          boxShadow: '0px 0px 6px rgba(127, 227, 255, 1)',
+        }
+      : {}),
   },
   enemyBullet: {
     position: 'absolute',
     width: BULLET_LEN, height: BULLET_W, borderRadius: BULLET_W / 2,
     backgroundColor: '#FF3030',
-    ...(Platform.OS === 'android' ? {} : {
-      boxShadow: '0px 0px 6px rgba(255, 0, 0, 1)',
-    }),
+    ...(Platform.OS === 'web'
+      ? {
+          boxShadow: '0px 0px 6px rgba(255, 0, 0, 1)',
+        }
+      : {}),
   },
 
   hud: {

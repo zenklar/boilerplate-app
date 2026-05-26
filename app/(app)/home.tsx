@@ -4,7 +4,7 @@ import {
   TouchableOpacity, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useTheme } from '../../theme';
 import { GAME_LIST, GameEntry } from '../../constants/gameList';
 import DailyLoginTile from '../../components/DailyLoginTile';
@@ -64,6 +64,9 @@ function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { width: screenW } = useWindowDimensions();
+  const pathname = usePathname();
+
+  if (pathname !== '/home') return null;
 
   const tileW = Math.floor((screenW - H_PAD * 2 - TILE_GAP * (COLS - 1)) / COLS);
 

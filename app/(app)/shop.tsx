@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
@@ -378,11 +379,14 @@ const PACKS: Pack[] = [
 /* ── Main screen ────────────────────────────────────────────────────── */
 export default function ShopScreen() {
   const { theme } = useTheme();
+  const pathname = usePathname();
   const addCoins = useCoinStore((s) => s.addCoins);
   const loadSubscription = useSubscriptionStore((s) => s.loadSubscription);
   const [claimed, setClaimed] = useState<string | null>(null);
 
   useEffect(() => { loadSubscription(); }, []);
+
+  if (pathname !== '/shop') return null;
 
   const handleClaim = (pack: Pack) => {
     addCoins(pack.coins);

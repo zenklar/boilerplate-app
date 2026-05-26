@@ -236,6 +236,8 @@ export default function TetrisGame() {
   const spendCoin = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const fpsCap = usePerformanceStore((s) => s.fpsCap);
+  const effectsBudget = usePerformanceStore((s) => s.adaptiveEffectsBudget);
+  const setAdaptiveEffectsBudget = usePerformanceStore((s) => s.setAdaptiveEffectsBudget);
 
   const gsRef = useRef<GS | null>(null);
   const heldRef = useRef<{ down: boolean }>({ down: false });
@@ -262,6 +264,8 @@ export default function TetrisGame() {
   const cellRef = useRef(0);
   const boardSizeRef = useRef({ w: 0, h: 0 });
   const boardRef = useRef<View>(null);
+  const effectsBudgetRef = useRef(1);
+  const pieceSfxGateRef = useRef(0);
 
   useEffect(() => {
     loadHighScore(); loadRuns();
@@ -269,6 +273,10 @@ export default function TetrisGame() {
     useSubscriptionStore.getState().loadSubscription();
     usePerformanceStore.getState().load();
   }, []);
+
+  useEffect(() => {
+    effectsBudgetRef.current = effectsBudget;
+  }, [effectsBudget]);
 
   // Boot the demo loop on first mount (and whenever we return to the menu).
   useEffect(() => {
@@ -346,7 +354,27 @@ export default function TetrisGame() {
   useEffect(() => {
     const tickMs = 1000 / fpsCap;
     const stepMul = BASE_SIM_FPS / fpsCap;
+    let lastTickTs = Date.now();
+    let budgetSampleMs = 0;
+
+    const scoreBudgetFromFrame = (frameMs: number) => {
+      const ratio = frameMs / tickMs;
+      if (ratio <= 1.05) return 1;
+      if (ratio <= 1.2) return 0.85;
+      if (ratio <= 1.45) return 0.65;
+      return 0.45;
+    };
+
     const id = setInterval(() => {
+      const now = Date.now();
+      const dtMs = Math.min(50, now - lastTickTs);
+      lastTickTs = now;
+      budgetSampleMs += dtMs;
+      if (budgetSampleMs >= 250) {
+        budgetSampleMs = 0;
+        setAdaptiveEffectsBudget(scoreBudgetFromFrame(dtMs));
+      }
+
       if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
       if (!g) return;
@@ -355,7 +383,9 @@ export default function TetrisGame() {
 
       // Line-clear flash: hold the cleared rows visible briefly, then collapse.
       if (g.flashTimer > 0) {
-        g.flashTimer -= stepMul;
+        const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+        const flashDecay = effectsScale >= 0.85 ? 1 : effectsScale >= 0.65 ? 1.35 : 1.7;
+        g.flashTimer -= stepMul * flashDecay;
         if (g.flashTimer <= 0) {
           const { board: cleaned } = clearFull(g.board);
           g.board = cleaned;
@@ -499,10 +529,16 @@ export default function TetrisGame() {
       // The game loop will collapse and spawn the next piece when the
       // timer reaches zero.
       g.flashRows = fullRows;
-      g.flashTimer = FLASH_FRAMES;
+      const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+      g.flashTimer = Math.max(4, Math.round(FLASH_FRAMES * (0.6 + effectsScale * 0.4)));
       return;
     }
-    if (!isDemo) playShoot();
+    if (!isDemo) {
+      const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+      const cadence = effectsScale >= 0.85 ? 1 : effectsScale >= 0.65 ? 2 : 3;
+      pieceSfxGateRef.current = (pieceSfxGateRef.current + 1) % cadence;
+      if (pieceSfxGateRef.current === 0) playShoot();
+    }
     spawnNext(isDemo);
   }
 
@@ -835,7 +871,7 @@ export default function TetrisGame() {
             width: cellsW, height: cellsH,
           }}>
           {/* Grid lines — 10 verticals + 20 horizontals beats 200 cells */}
-          <BoardGrid cell={CELL} />
+          {effectsBudget >= 0.55 && <BoardGrid cell={CELL} />}
           {/* Locked cells — memoised; only reconciles on lock / line-clear */}
           {showBoard && <LockedBoard board={g!.board} cell={CELL} />}
           {/* Ghost piece outline */}

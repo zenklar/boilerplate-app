@@ -160,6 +160,8 @@ export default function PongGame() {
   const spendCoin        = useCoinStore((s) => s.spendCoin);
   const isSubscribed     = useSubscriptionStore((s) => s.isSubscribed);
   const fpsCap           = usePerformanceStore((s) => s.fpsCap);
+  const effectsBudget    = usePerformanceStore((s) => s.adaptiveEffectsBudget);
+  const setAdaptiveEffectsBudget = usePerformanceStore((s) => s.setAdaptiveEffectsBudget);
 
   const [phase, setPhase]       = useState<Phase>('idle');
   const [, setTick]             = useState(0);
@@ -181,6 +183,8 @@ export default function PongGame() {
   const frameViewRef    = useRef<any>(null);
   const insertCoinRef   = useRef<() => void>(() => {});
   const triggerBoostRef = useRef<() => void>(() => {});
+  const effectsBudgetRef = useRef(1);
+  const hitSfxGateRef = useRef(0);
 
   // Animations
   const coinY        = useRef(new Animated.Value(-60)).current;
@@ -193,6 +197,10 @@ export default function PongGame() {
     loadHighScore();
     usePerformanceStore.getState().load();
   }, []);
+
+  useEffect(() => {
+    effectsBudgetRef.current = effectsBudget;
+  }, [effectsBudget]);
 
   // Auto-start demo when on idle
   useEffect(() => {
@@ -297,9 +305,39 @@ export default function PongGame() {
     const tickMs = 1000 / simFps;
     const stepMul = BASE_SIM_FPS / simFps;
     const lerpForStep = (a: number) => 1 - Math.pow(1 - a, stepMul);
+    let lastTickTs = Date.now();
+    let budgetSampleMs = 0;
+
+    const scoreBudgetFromFrame = (frameMs: number) => {
+      const ratio = frameMs / tickMs;
+      if (ratio <= 1.05) return 1;
+      if (ratio <= 1.2) return 0.85;
+      if (ratio <= 1.45) return 0.65;
+      return 0.45;
+    };
+
+    const maybePlayHitSfx = (isDemoMode: boolean) => {
+      if (isDemoMode) return;
+      const fx = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+      const cadence = fx >= 0.85 ? 1 : fx >= 0.65 ? 2 : 3;
+      hitSfxGateRef.current = (hitSfxGateRef.current + 1) % cadence;
+      if (hitSfxGateRef.current === 0) playShoot();
+    };
+
     const id = setInterval(() => {
+      const now = Date.now();
+      const dtMs = Math.min(50, now - lastTickTs);
+      lastTickTs = now;
+      budgetSampleMs += dtMs;
+      if (budgetSampleMs >= 250) {
+        budgetSampleMs = 0;
+        setAdaptiveEffectsBudget(scoreBudgetFromFrame(dtMs));
+      }
+
       const g = gsRef.current;
       if (!g) return;
+      const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
+      const splitChance = 0.2 * effectsScale;
       const paddleW = Math.max(40, frame.w * PADDLE_W_FRAC);
       const halfP   = paddleW / 2;
       const halfB   = BALL_SIZE / 2;
@@ -404,13 +442,13 @@ export default function PongGame() {
               ball.y = playerY - halfB - 1;
               g.rally += 1;
               if (g.rally > g.longestRally) g.longestRally = g.rally;
-              if (!isDemo) playShoot();
+              maybePlayHitSfx(isDemo);
               if (!isDemo) {
                 g.sessionScore += PTS_PER_HIT;
                 if (boosted) g.sessionScore += PTS_BOOST_HIT;
               }
               // 20% split on boosted hit (cap at 3 total balls)
-              if (boosted && Math.random() < 0.20 && surviving.length + g.balls.length < 4) {
+              if (boosted && Math.random() < splitChance && surviving.length + g.balls.length < 4) {
                 const sAngle = -angle + 0.5;
                 spawn = { x: ball.x, y: ball.y,
                   vx: Math.sin(sAngle) * speed,
@@ -437,8 +475,8 @@ export default function PongGame() {
               ball.y = cpuY + halfB + 1;
               g.rally += 1;
               if (g.rally > g.longestRally) g.longestRally = g.rally;
-              if (!isDemo) playShoot();
-              if (boosted && Math.random() < 0.20 && surviving.length + g.balls.length < 4) {
+              maybePlayHitSfx(isDemo);
+              if (boosted && Math.random() < splitChance && surviving.length + g.balls.length < 4) {
                 const sAngle = -angle + 0.5;
                 spawn = { x: ball.x, y: ball.y,
                   vx: Math.sin(sAngle) * speed,
@@ -659,7 +697,8 @@ export default function PongGame() {
   // border, which dominates the JS→UI bridge); the alpha-flicker carries the
   // effect by itself.
   const electricNodes: React.ReactNode[] = [];
-  if (showField && g && g.electricity.active) {
+  const showElectricFx = effectsBudget >= 0.65;
+  if (showField && g && g.electricity.active && showElectricFx) {
     const t = Date.now();
     const f1 = 0.45 + 0.55 * Math.abs(Math.sin(t * 0.042));
     const f2 = 0.45 + 0.55 * Math.abs(Math.sin(t * 0.071 + 1.3));

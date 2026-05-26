@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { usePathname } from 'expo-router';
 import { useGameUIStore } from '../../store/gameStore';
 import GameShell, { GameTab } from '../../components/game/GameShell';
 import AsteroidsGame from '../../components/AsteroidsGame';
@@ -18,6 +19,16 @@ const TABS: GameTab<Tab>[] = [
 export default function AsteroidsPage() {
   const [tab, setTab] = useState<Tab>('play');
   const isGamePlaying = useGameUIStore((s) => s.isGamePlaying);
+  const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname !== '/game/asteroids') {
+      setIsGamePlaying(false);
+    }
+  }, [pathname, setIsGamePlaying]);
+
+  if (pathname !== '/game/asteroids') return null;
 
   return (
     <GameShell tab={tab} setTab={setTab} tabs={TABS} isGamePlaying={isGamePlaying}>
