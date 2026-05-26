@@ -58,7 +58,8 @@ const TICK_MS = 16;
 const SOFT_DROP_DIVISOR = 6; // soft drop falls this many cells per gravity tick
 const LOCK_DELAY_FRAMES = 30;
 const NEXT_QUEUE_LEN = 3;
-const CTRL_H = Platform.OS === 'web' ? 0 : 150;
+const CTRL_H = Platform.OS === 'web' ? 0 : 120;
+const HUD_H = Platform.OS === 'web' ? 0 : 58;
 
 type Phase = 'idle' | 'demo' | 'coinanim' | 'countdown' | 'playing' | 'gameover';
 type Cell = TetrominoType | null;
@@ -211,6 +212,20 @@ export default function TetrisGame() {
 
   const gsRef = useRef<GS | null>(null);
   const heldRef = useRef<{ down: boolean }>({ down: false });
+  const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startHold = (action: () => void) => {
+    action();
+    holdTimeout.current = setTimeout(() => {
+      holdInterval.current = setInterval(action, 80);
+    }, 180);
+  };
+
+  const stopHold = () => {
+    if (holdTimeout.current) { clearTimeout(holdTimeout.current); holdTimeout.current = null; }
+    if (holdInterval.current) { clearInterval(holdInterval.current); holdInterval.current = null; }
+  };
   // Web-only: tracks the column the mouse is currently over, or null when
   // the mouse is outside the board. Used to steer the active piece.
   const mouseTargetX = useRef<number | null>(null);
@@ -378,15 +393,19 @@ export default function TetrisGame() {
       if (g.dropAccum >= effective) {
         g.dropAccum = 0;
         const moved = { ...g.active, y: g.active.y + 1 };
-        if (collides(g.board, moved)) {
-          g.lockTimer++;
-          if (g.lockTimer >= LOCK_DELAY_FRAMES) {
-            lockPiece(isDemo);
-          }
-        } else {
+        if (!collides(g.board, moved)) {
           g.active = moved;
           g.lockTimer = 0;
           if (!isDemo && heldRef.current.down) g.score += 1; // soft drop bonus
+        }
+      }
+      // Lock delay: count raw 16ms ticks while piece rests on a surface.
+      // Previously counted gravity cycles (very slow at low levels). Now
+      // LOCK_DELAY_FRAMES × 16ms gives a consistent ~480 ms across all levels.
+      if (g.active && collides(g.board, { ...g.active, y: g.active.y + 1 })) {
+        g.lockTimer++;
+        if (g.lockTimer >= LOCK_DELAY_FRAMES) {
+          lockPiece(isDemo);
         }
       }
       setTick((t) => t + 1);
@@ -652,15 +671,14 @@ export default function TetrisGame() {
   const isDemoLayout = phase === 'idle' || phase === 'demo';
   const demoReserveTop = 160;
   const demoReserveBottom = 150;
-  const sidePanelW = isDemoLayout ? 0 : Math.min(120, area.w * 0.3);
-  const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : 40;
+  const reservedH = isDemoLayout ? demoReserveTop + demoReserveBottom : HUD_H;
   // During demo / idle the outer frame is the shared preview box (same exact
   // size as every other arcade title); during gameplay we let the board fill
   // the available area normally.
   // Use full area.h for the demo preview (controls aren't shown then) so the
   // preview matches Asteroids which measures its gameArea without CTRL_H.
   const preview = fitPreview(area.w, isDemoLayout ? area.h : playableH);
-  const maxByW = (isDemoLayout ? preview.w : area.w - sidePanelW - 40) / BOARD_W;
+  const maxByW = (isDemoLayout ? preview.w : area.w) / BOARD_W;
   const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
   const cellsW = CELL * BOARD_W;
@@ -709,9 +727,61 @@ export default function TetrisGame() {
           justifyContent: isDemoLayout ? 'center' : 'flex-start',
         },
       ]}>
-        {/* Board + side panel are hidden during gameover so the overlay is
+        {/* Board is hidden during gameover so the overlay is
             the only thing on screen, matching the web layout. */}
         {phase !== 'gameover' && (<>
+        {/* HUD — score / level / lines / next. Hidden on title/demo screen. */}
+        {!isDemoLayout && (
+        <View style={s.hud}>
+          <View style={s.hudStat}>
+            <Text style={[s.sideLabel, { fontFamily: MONO }]}>SCORE</Text>
+            <Text style={[s.hudValue, { fontFamily: MONO }]}>
+              {g ? String(g.score).padStart(5, '0') : '00000'}
+            </Text>
+          </View>
+          <View style={s.hudStat}>
+            <Text style={[s.sideLabel, { fontFamily: MONO }]}>LEVEL</Text>
+            <Text style={[s.hudValue, { fontFamily: MONO }]}>{g ? g.level : 1}</Text>
+          </View>
+          <View style={s.hudStat}>
+            <Text style={[s.sideLabel, { fontFamily: MONO }]}>LINES</Text>
+            <Text style={[s.hudValue, { fontFamily: MONO }]}>{g ? g.lines : 0}</Text>
+          </View>
+          <View style={s.hudNext}>
+            <Text style={[s.sideLabel, { fontFamily: MONO }]}>NEXT</Text>
+            <View style={s.hudNextRow}>
+              {g && phase === 'playing' && g.nextQueue.slice(0, NEXT_QUEUE_LEN).map((type, idx) => {
+                const m = TETROMINOS[type][0];
+                const cs = 9;
+                const color = TETROMINO_COLORS[type];
+                return (
+                  <View
+                    key={idx}
+                    style={[s.hudNextBox, { width: m[0].length * cs + 4, height: m.length * cs + 4 }]}
+                  >
+                    {m.map((row, ry) =>
+                      row.map((v, rx) => v ? (
+                        <View key={`${ry}-${rx}`} style={{
+                          position: 'absolute',
+                          left: 2 + rx * cs,
+                          top: 2 + ry * cs,
+                        }}>
+                          <PixelBlock size={cs} color={color} />
+                        </View>
+                      ) : null)
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+          {Platform.OS !== 'web' && phase === 'playing' && (
+            <Pressable onPress={gameOver} style={s.giveUpBtn}>
+              <Text style={[s.giveUpTxt, { fontFamily: MONO }]}>GIVE UP</Text>
+            </Pressable>
+          )}
+        </View>
+        )}
         {/* Board — Pressable so a left click rotates CW */}
         <Pressable
           ref={boardRef as any}
@@ -777,50 +847,6 @@ export default function TetrisGame() {
           </View>
         </Pressable>
 
-        {/* Side panel — score / level / lines / next 3. Hidden on the
-            title/demo screen so the preview reads as just the board. */}
-        {!isDemoLayout && (
-        <View style={[s.side, { width: sidePanelW }]}>
-          <Text style={[s.sideLabel, { fontFamily: MONO }]}>SCORE</Text>
-          <Text style={[s.sideValue, { fontFamily: MONO }]}>
-            {g ? String(g.score).padStart(5, '0') : '00000'}
-          </Text>
-          <Text style={[s.sideLabel, { fontFamily: MONO }]}>LEVEL</Text>
-          <Text style={[s.sideValue, { fontFamily: MONO }]}>
-            {g ? g.level : 1}
-          </Text>
-          <Text style={[s.sideLabel, { fontFamily: MONO }]}>LINES</Text>
-          <Text style={[s.sideValue, { fontFamily: MONO }]}>
-            {g ? g.lines : 0}
-          </Text>
-          <Text style={[s.sideLabel, { fontFamily: MONO, marginTop: 8 }]}>NEXT</Text>
-          <View style={s.nextStack}>
-            {g && phase === 'playing' && g.nextQueue.slice(0, NEXT_QUEUE_LEN).map((type, idx) => {
-              const m = TETROMINOS[type][0];
-              const cellSize = CELL * (idx === 0 ? 0.7 : 0.5);
-              const color = TETROMINO_COLORS[type];
-              return (
-                <View
-                  key={idx}
-                  style={[s.nextBox, { width: cellSize * 4 + 8, height: cellSize * 2 + 8 }]}
-                >
-                  {m.map((row, ry) =>
-                    row.map((v, rx) => v ? (
-                      <View key={`${ry}-${rx}`} style={{
-                        position: 'absolute',
-                        left: 4 + rx * cellSize,
-                        top: 4 + ry * cellSize,
-                      }}>
-                        <PixelBlock size={cellSize} color={color} />
-                      </View>
-                    ) : null)
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        )}
         </>)}
       </View>
 
@@ -904,43 +930,34 @@ export default function TetrisGame() {
         </View>
       )}
 
-      {/* Give up button (mobile) */}
-      {Platform.OS !== 'web' && phase === 'playing' && (
-        <Pressable
-          onPress={gameOver}
-          style={{
-            position: 'absolute', top: 12, right: 12,
-            backgroundColor: '#CC0000',
-            paddingHorizontal: 12, paddingVertical: 6,
-            borderRadius: 4, zIndex: 20,
-          }}
-        >
-          <Text style={{ color: '#fff', fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1 }}>GIVE UP</Text>
-        </Pressable>
-      )}
-
       {/* Touch controls (mobile) */}
       {Platform.OS !== 'web' && phase === 'playing' && (
         <View style={s.ctrlOverlay}>
-          <Pressable style={s.ctrlBtn} onPressIn={() => tryMove(-1, 0)}>
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>◀</Text>
-          </Pressable>
-          <Pressable style={s.ctrlBtn} onPressIn={() => tryRotate(1)}>
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⟳</Text>
-          </Pressable>
-          <Pressable
-            style={s.ctrlBtn}
-            onPressIn={() => { heldRef.current.down = true; }}
-            onPressOut={() => { heldRef.current.down = false; }}
-          >
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
-          </Pressable>
-          <Pressable style={s.ctrlBtn} onPressIn={() => tryMove(1, 0)}>
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
-          </Pressable>
-          <Pressable style={[s.ctrlBtn, s.dropBtn]} onPressIn={hardDrop}>
-            <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⤓</Text>
-          </Pressable>
+          {/* Top row: move left/right, rotate CCW/CW, soft drop */}
+          <View style={s.ctrlRow}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => tryMove(-1, 0))} onPressOut={stopHold}>
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>◀</Text>
+            </Pressable>
+            <Pressable
+              style={s.ctrlBtn}
+              onPressIn={() => { heldRef.current.down = true; }}
+              onPressOut={() => { heldRef.current.down = false; }}
+            >
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
+            </Pressable>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => tryMove(1, 0))} onPressOut={stopHold}>
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
+            </Pressable>
+          </View>
+          {/* Bottom row: rotate + wide instant-drop */}
+          <View style={s.ctrlRow}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => tryRotate(1)}>
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>⟳</Text>
+            </Pressable>
+            <Pressable style={[s.dropWideBtn, { flex: 1 }]} onPressIn={hardDrop}>
+              <Text style={[s.dropWideTxt, { fontFamily: MONO }]}>▼ DOWN</Text>
+            </Pressable>
+          </View>
         </View>
       )}
     </View>
@@ -951,8 +968,8 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
 
   gameArea: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 14, padding: 8,
+    flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+    paddingBottom: 2,
   },
   board: {
     backgroundColor: '#050505',
@@ -1035,18 +1052,72 @@ const s = StyleSheet.create({
   ctrlOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CTRL_H,
+    flexDirection: 'column',
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  ctrlRow: {
+    flex: 1,
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
     gap: 8,
-    alignItems: 'center', justifyContent: 'space-between',
   },
   ctrlBtn: {
-    flex: 1, height: CTRL_H - 20,
+    flex: 1,
     borderWidth: 1.5, borderColor: '#333',
     backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center', justifyContent: 'center',
   },
-  ctrlBtnTxt: { color: '#EEE', fontSize: 30, fontWeight: '700' },
+  ctrlCenter: {
+    flex: 1,
+    flexDirection: 'column',
+    gap: 8,
+  },
+  ctrlBtnTxt: { color: '#EEE', fontSize: 28, fontWeight: '700' },
   dropBtn: { borderColor: '#FFD700', backgroundColor: 'rgba(255,215,0,0.08)' },
+  dropWideBtn: {
+    borderWidth: 2, borderColor: '#B8860B',
+    backgroundColor: '#FFD700',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 4,
+  },
+  dropWideTxt: { color: '#000', fontSize: 15, fontWeight: '800', letterSpacing: 3 },
+  hud: {
+    width: '100%' as any,
+    height: HUD_H,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-around' as const,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1A',
+  },
+  hudStat: {
+    alignItems: 'center' as const,
+    gap: 2,
+  },
+  hudValue: { color: '#FFF', fontSize: 20, fontWeight: '700' as const, letterSpacing: 1 },
+  hudNext: {
+    alignItems: 'center' as const,
+    gap: 2,
+  },
+  giveUpBtn: {
+    backgroundColor: '#CC0000',
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 4,
+    alignSelf: 'center' as const,
+  },
+  giveUpTxt: { color: '#fff', fontSize: 11, fontWeight: '700' as const, letterSpacing: 1 },
+  hudNextRow: {
+    flexDirection: 'row' as const,
+    gap: 4,
+    alignItems: 'center' as const,
+  },
+  hudNextBox: {
+    backgroundColor: '#070707',
+    borderWidth: 1, borderColor: '#1A1A1A',
+    position: 'relative' as const,
+  },
 });

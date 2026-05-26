@@ -50,7 +50,7 @@ export const TETROMINO_COLORS: Record<TetrominoType, string> = {
   L: '#FF9A3C',
 };
 
-export const BOARD_W = 10;
+export const BOARD_W = 12;
 export const BOARD_H = 20;
 
 // Score table (BPS): bonus per simultaneous line clear, multiplied by level.

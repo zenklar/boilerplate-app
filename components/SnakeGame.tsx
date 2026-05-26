@@ -13,7 +13,7 @@ import {
 } from '../utils/sounds';
 
 // ── Board dimensions ───────────────────────────────────────────────────────
-const BOARD_W = 12;
+const BOARD_W = 14;
 const BOARD_H = 25;
 const TICK_MS = 16;
 const SCORE_PER_FOOD = 10;
@@ -32,8 +32,7 @@ const FOOD_COLOR = '#FF3333';
 const BG_COLOR   = '#000';
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-const CTRL_H = Platform.OS === 'web' ? 0 : 168;
-const DPAD_BTN = 58;
+const CTRL_H = Platform.OS === 'web' ? 0 : 120;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Dir = 'up' | 'down' | 'left' | 'right';
@@ -390,13 +389,13 @@ export default function SnakeGame() {
   const demoReserveTop    = 160;
   const demoReserveBottom = 150;
   const playableH  = area.h - CTRL_H;
-  const reservedH  = isDemoLayout ? demoReserveTop + demoReserveBottom : 60;
+  const reservedH  = isDemoLayout ? demoReserveTop + demoReserveBottom : 50;
   // Demo / idle uses the shared preview-frame size (same on every game);
   // gameplay uses the natural cell grid filling the available area.
   // Use full area.h for the demo preview (controls aren't shown then) so the
   // preview matches Asteroids which measures its gameArea without CTRL_H.
   const preview = fitPreview(area.w, isDemoLayout ? area.h : playableH);
-  const maxByW = (isDemoLayout ? preview.w : area.w - 24) / BOARD_W;
+  const maxByW = (isDemoLayout ? preview.w : area.w) / BOARD_W;
   const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL       = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
   const cellsW     = CELL * BOARD_W;
@@ -406,6 +405,10 @@ export default function SnakeGame() {
   const boardPxH   = isDemoLayout ? preview.h : cellsH;
   const cellsOffsetX = Math.floor((boardPxW - cellsW) / 2);
   const cellsOffsetY = Math.floor((boardPxH - cellsH) / 2);
+  // Horizontal inset so the controls overlay matches the board width exactly.
+  const ctrlInset = Platform.OS !== 'web' && !isDemoLayout && cellsW > 0
+    ? Math.max(0, Math.floor((area.w - cellsW) / 2))
+    : 0;
 
   const g         = gsRef.current;
   // During game-over, render NOTHING behind the overlay so the game-over
@@ -423,7 +426,8 @@ export default function SnakeGame() {
         s.gameArea,
         {
           paddingTop: isDemoLayout ? demoReserveTop : 0,
-          paddingBottom: isDemoLayout ? demoReserveBottom : 0,
+          paddingBottom: isDemoLayout ? demoReserveBottom : (Platform.OS !== 'web' ? CTRL_H : 0),
+          justifyContent: isDemoLayout ? 'center' : 'flex-end',
         },
       ]}>
 
@@ -592,36 +596,24 @@ export default function SnakeGame() {
         </Pressable>
       )}
 
-      {/* ── Mobile D-pad ── */}
+      {/* ── Mobile arrow controls ── */}
       {Platform.OS !== 'web' && phase === 'playing' && (
-        <View style={s.ctrlOverlay}>
-          <View style={s.dpad}>
-            {/* Row 1: Up */}
-            <View style={s.dpadRow}>
-              <View style={s.dpadSpacer} />
-              <Pressable style={s.dpadBtn} onPress={() => enqueueDir('up')}>
-                <Text style={[s.dpadTxt, { fontFamily: MONO }]}>▲</Text>
+        <View style={[s.ctrlOverlay, { left: ctrlInset, right: ctrlInset }]}>
+          <View style={s.ctrlRow}>
+            <Pressable style={s.ctrlBtn} onPress={() => enqueueDir('left')}>
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>◀</Text>
+            </Pressable>
+            <View style={s.ctrlCenter}>
+              <Pressable style={s.ctrlBtn} onPress={() => enqueueDir('up')}>
+                <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▲</Text>
               </Pressable>
-              <View style={s.dpadSpacer} />
-            </View>
-            {/* Row 2: Left, Center, Right */}
-            <View style={s.dpadRow}>
-              <Pressable style={s.dpadBtn} onPress={() => enqueueDir('left')}>
-                <Text style={[s.dpadTxt, { fontFamily: MONO }]}>◀</Text>
-              </Pressable>
-              <View style={s.dpadMiddle} />
-              <Pressable style={s.dpadBtn} onPress={() => enqueueDir('right')}>
-                <Text style={[s.dpadTxt, { fontFamily: MONO }]}>▶</Text>
+              <Pressable style={s.ctrlBtn} onPress={() => enqueueDir('down')}>
+                <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
               </Pressable>
             </View>
-            {/* Row 3: Down */}
-            <View style={s.dpadRow}>
-              <View style={s.dpadSpacer} />
-              <Pressable style={s.dpadBtn} onPress={() => enqueueDir('down')}>
-                <Text style={[s.dpadTxt, { fontFamily: MONO }]}>▼</Text>
-              </Pressable>
-              <View style={s.dpadSpacer} />
-            </View>
+            <Pressable style={s.ctrlBtn} onPress={() => enqueueDir('right')}>
+              <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -634,7 +626,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
 
   gameArea: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 8,
+    flex: 1, alignItems: 'center', justifyContent: 'flex-end',
   },
 
   board: {
@@ -715,26 +707,29 @@ const s = StyleSheet.create({
   goBtnSecondary:     { borderColor: '#666' },
   goBtnSecondaryTxt:  { color: '#999' },
 
-  // Mobile D-pad
+  // Mobile arrow controls
   ctrlOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CTRL_H,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  ctrlRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ctrlBtn: {
+    flex: 1,
+    borderWidth: 1.5, borderColor: '#333',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center', justifyContent: 'center',
-    paddingBottom: 18,
   },
-  dpad:       { gap: 3 },
-  dpadRow:    { flexDirection: 'row', gap: 3 },
-  dpadBtn: {
-    width: DPAD_BTN, height: DPAD_BTN,
-    borderWidth: 1.5, borderColor: '#1A3A08',
-    backgroundColor: 'rgba(78,211,31,0.07)',
-    alignItems: 'center', justifyContent: 'center',
+  ctrlCenter: {
+    flex: 1,
+    flexDirection: 'column',
+    gap: 8,
   },
-  dpadSpacer: { width: DPAD_BTN, height: DPAD_BTN },
-  dpadMiddle: {
-    width: DPAD_BTN, height: DPAD_BTN,
-    backgroundColor: '#060E02',
-    borderWidth: 1.5, borderColor: '#0C1A06',
-  },
-  dpadTxt: { color: '#4ED31F', fontSize: 22, fontWeight: '700' },
+  ctrlBtnTxt: { color: '#EEE', fontSize: 28, fontWeight: '700' },
 });

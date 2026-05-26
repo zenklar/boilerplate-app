@@ -16,7 +16,8 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const TICK_MS = 16;
-const CTRL_H = Platform.OS === 'web' ? 0 : 90;   // mobile reserves BOOST button row
+const CTRL_H = Platform.OS === 'web' ? 0 : 0;    // boost button removed; slider space handled by SLIDER_H
+const SLIDER_H = Platform.OS === 'web' ? 0 : 56;  // mobile slider control height
 
 const FRAME_RATIO = 0.62;          // w / h — vertical playfield
 const PADDLE_W_FRAC = 0.22;        // paddle width as fraction of frame width
@@ -155,12 +156,15 @@ export default function PongGame() {
   const gsRef       = useRef<GS | null>(null);
   const frameRef    = useRef({ w: 0, h: 0 });
   // Input: target x for the player paddle (driven by mouse or touch drag)
-  const targetXRef  = useRef<number | null>(null);
+  const targetXRef      = useRef<number | null>(null);
+  // Paddle x captured at the moment a touch starts (delta-drag anchor)
+  const paddleAtGrantRef = useRef<number>(0);
   // Stable ref for current phase (used inside stable event listeners)
   const phaseRef    = useRef<Phase>(phase);
   phaseRef.current  = phase;
   const frameViewRef    = useRef<any>(null);
   const insertCoinRef   = useRef<() => void>(() => {});
+  const triggerBoostRef = useRef<() => void>(() => {});
 
   // Animations
   const coinY        = useRef(new Animated.Value(-60)).current;
@@ -186,6 +190,7 @@ export default function PongGame() {
     g.playerBoostActive = BOOST_ACTIVE_TICKS;
     g.playerBoostCD = BOOST_COOLDOWN_TICKS;
   }, []);
+  triggerBoostRef.current = triggerPlayerBoost;
 
   // Web: track mouse position for paddle — fires without any click
   useEffect(() => {
@@ -230,14 +235,28 @@ export default function PongGame() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [triggerPlayerBoost]);
 
-  // Touch drag (mobile + web) — set target x for the paddle
+  // Touch drag (mobile + web) — delta-based so coordinate system of the
+  // touched view (thumb vs track) never matters; paddle moves by the
+  // distance the finger has travelled since touch-start.
+  // A minimal-movement release (tap) triggers boost.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => { targetXRef.current = e.nativeEvent.locationX; },
-      onPanResponderMove: (e) => { targetXRef.current = e.nativeEvent.locationX; },
-      onPanResponderRelease: () => { targetXRef.current = null; },
+      onPanResponderGrant: () => {
+        // Capture paddle position as the drag origin — don't move yet
+        paddleAtGrantRef.current = gsRef.current?.playerX ?? frameRef.current.w / 2;
+      },
+      onPanResponderMove: (_e, gs) => {
+        targetXRef.current = paddleAtGrantRef.current + gs.dx;
+      },
+      onPanResponderRelease: (_e, gs) => {
+        // Tap (minimal movement) → boost; drag → just release
+        if (Math.abs(gs.dx) < 8 && Math.abs(gs.dy) < 8) {
+          triggerBoostRef.current();
+        }
+        targetXRef.current = null;
+      },
       onPanResponderTerminate: () => { targetXRef.current = null; },
     }),
   ).current;
@@ -262,7 +281,12 @@ export default function PongGame() {
         const aim = playerThreat ? playerThreat.x : frame.w / 2;
         g.playerX += (aim - g.playerX) * CPU_DEMO_TRACK * 0.85;
       } else if (targetXRef.current != null) {
-        g.playerX += (targetXRef.current - g.playerX) * 0.35;
+        // Mobile: snap directly (1:1 with finger); web: smooth lerp
+        if (Platform.OS === 'web') {
+          g.playerX += (targetXRef.current - g.playerX) * 0.35;
+        } else {
+          g.playerX = targetXRef.current;
+        }
       }
       g.playerX = Math.max(halfP, Math.min(frame.w - halfP, g.playerX));
 
@@ -572,7 +596,7 @@ export default function PongGame() {
     frameH = preview.h;
   } else {
     const maxW = area.w - 16;
-    const maxH = playableH - 16;
+    const maxH = playableH - 16 - SLIDER_H - (SLIDER_H > 0 ? 8 : 0);
     frameW = maxW;
     frameH = frameW / FRAME_RATIO;
     if (frameH > maxH) { frameH = maxH; frameW = frameH * FRAME_RATIO; }
@@ -654,7 +678,6 @@ export default function PongGame() {
         <View
           ref={frameViewRef}
           style={[s.frame, { width: frameW, height: frameH }]}
-          {...panResponder.panHandlers}
         >
           {/* Net */}
           {netDashes}
@@ -665,11 +688,6 @@ export default function PongGame() {
               <Text style={[s.scoreTopBig, { fontFamily: MONO }]}>{Math.max(0, -g!.playerScore)}</Text>
               <Text style={[s.scoreBotBig, { fontFamily: MONO }]}>{Math.max(0, g!.playerScore)}</Text>
             </>
-          )}
-
-          {/* Live session score — top-right corner */}
-          {showField && phase === 'playing' && (
-            <Text style={[s.liveScore, { fontFamily: MONO }]}>{g!.sessionScore}</Text>
           )}
 
           {/* Electricity border effect */}
@@ -757,6 +775,23 @@ export default function PongGame() {
           )}
 
         </View>
+        )}
+
+        {/* Touch slider — mobile only, shown during all non-demo/gameover phases
+            so the frame size stays stable, interactive only when playing */}
+        {Platform.OS !== 'web' && !isDemoLayout && phase !== 'gameover' && (
+          <View
+            style={[s.sliderBar, { width: frameW, marginTop: 8 }]}
+            {...(phase === 'playing' ? panResponder.panHandlers : {})}
+          >
+            <View style={s.sliderTrack} />
+            {phase === 'playing' && g && (
+              <View style={[s.sliderThumb, {
+                left: g.playerX - 22,
+                backgroundColor: playerColor,
+              }]} />
+            )}
+          </View>
         )}
       </View>
 
@@ -850,8 +885,8 @@ export default function PongGame() {
             </Pressable>
             <Text style={[s.hint, { fontFamily: MONO }]}>
               {Platform.OS === 'web'
-                ? 'Mouse to move  ·  Click  BOOST'
-                : 'Drag to move  ·  tap BOOST to smash'}
+                ? 'Mouse to move  ·  Click to BOOST'
+                : 'Drag button to move  ·  Tap to BOOST'}
             </Text>
           </View>
         </>
@@ -872,24 +907,15 @@ export default function PongGame() {
         </Pressable>
       )}
 
-      {/* Mobile BOOST button (below the frame) */}
-      {Platform.OS !== 'web' && phase === 'playing' && (
-        <View style={s.boostBar}>
-          <Pressable
-            onPress={triggerPlayerBoost}
-            style={[
-              s.boostBtn,
-              playerBoostActive && s.boostBtnActive,
-              !playerBoostReady && !playerBoostActive && s.boostBtnCooldown,
-            ]}
-          >
-            <Text style={[s.boostBtnTxt, { fontFamily: MONO },
-              playerBoostActive && { color: '#000' }]}>
-              {playerBoostActive ? 'SMASH!' : playerBoostReady ? 'BOOST' : 'WAIT'}
-            </Text>
-          </Pressable>
+      {/* Centred score HUD — same row as GIVE UP button */}
+      {phase === 'playing' && g && (
+        <View style={s.scoreHud} pointerEvents="none">
+          <Text style={[s.hudLabel, { fontFamily: MONO }]}>SCORE</Text>
+          <Text style={[s.hudValue, { fontFamily: MONO }]}>{g.sessionScore}</Text>
         </View>
       )}
+
+      {/* Mobile BOOST button removed — boost is activated by tapping the slider button */}
     </View>
   );
 }
@@ -919,19 +945,6 @@ const s = StyleSheet.create({
 
   overlayTop:    { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 30 },
   overlayBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 20 },
-
-  boostBar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    height: 90, alignItems: 'center', justifyContent: 'center',
-  },
-  boostBtn: {
-    paddingHorizontal: 36, paddingVertical: 14,
-    borderWidth: 2, borderColor: '#FFD700',
-    backgroundColor: 'rgba(255,215,0,0.10)',
-  },
-  boostBtnActive: { backgroundColor: '#FFD700', borderColor: '#FFEE40' },
-  boostBtnCooldown: { borderColor: '#555', backgroundColor: 'rgba(120,120,120,0.10)' },
-  boostBtnTxt: { color: '#FFD700', fontSize: 16, letterSpacing: 4, fontWeight: '800' },
 
   titleText: {
     color: '#FFF', fontSize: 36, fontWeight: '800', letterSpacing: 10,
@@ -992,5 +1005,31 @@ const s = StyleSheet.create({
   liveScore: {
     position: 'absolute', top: 8, right: 10,
     color: 'rgba(255,215,0,0.80)', fontSize: 13, fontWeight: '700', letterSpacing: 2,
+  },
+
+  scoreHud: {
+    position: 'absolute', top: 10, left: 0, right: 0,
+    alignItems: 'center', zIndex: 15,
+  },
+  hudLabel: { color: '#7A6000', fontSize: 9, letterSpacing: 3 },
+  hudValue: { color: '#FFD700', fontSize: 16, fontWeight: '700', letterSpacing: 2 },
+
+  sliderBar: {
+    height: 56,
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  sliderTrack: {
+    height: 2,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 1,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    top: 6,           // (56 - 44) / 2
+    borderRadius: 22, // full circle
+    backgroundColor: '#FFD700',
   },
 });
