@@ -401,7 +401,7 @@ export default function PongGame() {
               ball.y = playerY - halfB - 1;
               g.rally += 1;
               if (g.rally > g.longestRally) g.longestRally = g.rally;
-              if (Platform.OS === 'web' && !isDemo) playShoot();
+              if (!isDemo) playShoot();
               if (!isDemo) {
                 g.sessionScore += PTS_PER_HIT;
                 if (boosted) g.sessionScore += PTS_BOOST_HIT;
@@ -434,7 +434,7 @@ export default function PongGame() {
               ball.y = cpuY + halfB + 1;
               g.rally += 1;
               if (g.rally > g.longestRally) g.longestRally = g.rally;
-              if (Platform.OS === 'web' && !isDemo) playShoot();
+              if (!isDemo) playShoot();
               if (boosted && Math.random() < 0.20 && surviving.length + g.balls.length < 4) {
                 const sAngle = -angle + 0.5;
                 spawn = { x: ball.x, y: ball.y,
@@ -447,7 +447,7 @@ export default function PongGame() {
           // Scoring — net: player goal = +1, CPU goal = -1 on playerScore
           if (ball.y > frame.h + BALL_SIZE) {
             g.playerScore -= 1; scored = true; nextServeDir = -1;
-            if (Platform.OS === 'web' && !isDemo) playShipDestroyed();
+            if (!isDemo) playShipDestroyed();
             if (!isDemo && g.playerScore <= -WIN_SCORE) {
               g.matchCpuWins += 1;
               if (g.matchCpuWins >= MATCH_WIN) finishRun(g, false);
@@ -456,7 +456,7 @@ export default function PongGame() {
             }
           } else if (ball.y < -BALL_SIZE) {
             g.playerScore += 1; scored = true; nextServeDir = 1;
-            if (Platform.OS === 'web' && !isDemo) playShipDestroyed();
+            if (!isDemo) playShipDestroyed();
             if (!isDemo) {
               // Goal points: base + speed bonus + rally depth + electricity bonus
               const spd = Math.hypot(ball.vx, ball.vy);
@@ -544,10 +544,8 @@ export default function PongGame() {
     setCountNum(n);
     cdScale.setValue(2.2);
     cdOpacity.setValue(1);
-    if (Platform.OS === 'web') {
-      if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
-      else playCountdownGo();
-    }
+    if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
+    else playCountdownGo();
     Animated.parallel([
       Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
       Animated.sequence([
@@ -568,7 +566,7 @@ export default function PongGame() {
     coinScale.setValue(0.5);
     coinOpacity.setValue(1);
     setPhase('coinanim');
-    if (Platform.OS === 'web') playCoinInsert();
+    playCoinInsert();
     Animated.parallel([
       Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
       Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),

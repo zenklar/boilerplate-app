@@ -278,7 +278,7 @@ export default function SnakeGame() {
         if (!isDemo) {
           g.score += SCORE_PER_FOOD * g.level;
           if (g.foodEaten % FOOD_PER_LEVEL === 0) g.level++;
-          if (Platform.OS === 'web') playShoot();
+          playShoot();
         }
         g.food = randomFood(g.snake);
       } else {
@@ -322,7 +322,7 @@ export default function SnakeGame() {
       durationMs: Date.now() - g.startTime,
       date: Date.now(),
     });
-    if (Platform.OS === 'web') playShipDestroyed();
+    playShipDestroyed();
     setPhase('gameover');
     // Keep isGamePlaying TRUE through the game-over screen so the GameShell
     // chrome (header + nav) stays hidden — the game-over overlay should be
@@ -347,10 +347,8 @@ export default function SnakeGame() {
     setCountNum(n);
     cdScale.setValue(2.2);
     cdOpacity.setValue(1);
-    if (Platform.OS === 'web') {
-      if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
-      else playCountdownGo();
-    }
+    if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
+    else playCountdownGo();
     Animated.parallel([
       Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
       Animated.sequence([
@@ -371,7 +369,7 @@ export default function SnakeGame() {
     coinScale.setValue(0.5);
     coinOpacity.setValue(1);
     setPhase('coinanim');
-    if (Platform.OS === 'web') playCoinInsert();
+    playCoinInsert();
     Animated.parallel([
       Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
       Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),

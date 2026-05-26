@@ -495,7 +495,7 @@ export default function TetrisGame() {
         const newLevel = Math.floor(g.lines / 10) + 1;
         if (newLevel !== g.level) g.level = newLevel;
       }
-      if (Platform.OS === 'web' && !isDemo) {
+      if (!isDemo) {
         playExplosion(cleared >= 4 ? 'large' : cleared >= 2 ? 'medium' : 'small');
       }
       // Hold the cleared rows visible (flashing) for FLASH_FRAMES ticks.
@@ -505,7 +505,7 @@ export default function TetrisGame() {
       g.flashTimer = FLASH_FRAMES;
       return;
     }
-    if (Platform.OS === 'web' && !isDemo) playShoot();
+    if (!isDemo) playShoot();
     spawnNext(isDemo);
   }
 
@@ -571,7 +571,7 @@ export default function TetrisGame() {
       durationMs: Date.now() - g.startTime,
       date: Date.now(),
     });
-    if (Platform.OS === 'web') playShipDestroyed();
+    playShipDestroyed();
     setPhase('gameover');
     // Keep isGamePlaying TRUE through the game-over screen so the GameShell
     // chrome stays hidden — only handleBackToMenu (MENU button) flips it back.
@@ -632,10 +632,8 @@ export default function TetrisGame() {
     setCountNum(n);
     cdScale.setValue(2.2);
     cdOpacity.setValue(1);
-    if (Platform.OS === 'web') {
-      if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
-      else playCountdownGo();
-    }
+    if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
+    else playCountdownGo();
     Animated.parallel([
       Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
       Animated.sequence([
@@ -656,7 +654,7 @@ export default function TetrisGame() {
     coinScale.setValue(0.5);
     coinOpacity.setValue(1);
     setPhase('coinanim');
-    if (Platform.OS === 'web') playCoinInsert();
+    playCoinInsert();
     Animated.parallel([
       Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),
       Animated.timing(coinScale, { toValue: 1.3,     duration: 520, useNativeDriver: true }),

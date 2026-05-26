@@ -436,7 +436,7 @@ export default function AsteroidsGame() {
           g.phase = 'playing';
           g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
           g.startTime = Date.now();
-          if (Platform.OS === 'web' && thrustSoundRef.current) {
+          if (thrustSoundRef.current) {
             thrustSoundRef.current.stop(); thrustSoundRef.current = null;
           }
         }
@@ -488,7 +488,7 @@ export default function AsteroidsGame() {
           g.svy = (g.svy / spd) * MAX_SPD;
         }
         // Start thrust sound once
-        if (Platform.OS === 'web' && !thrustSoundRef.current) {
+        if (!thrustSoundRef.current) {
           thrustSoundRef.current = playThrustStart();
         }
         const exhaustR = toR(g.sAngle + 90);
@@ -508,7 +508,7 @@ export default function AsteroidsGame() {
             kind: 'thrust',
           });
         }
-      } else if (Platform.OS === 'web' && thrustSoundRef.current) {
+      } else if (thrustSoundRef.current) {
         thrustSoundRef.current.stop();
         thrustSoundRef.current = null;
       }
@@ -543,7 +543,7 @@ export default function AsteroidsGame() {
         });
         c.fireCD = FIRE_CD;
         g.bulletsShot++;
-        if (Platform.OS === 'web' && !isDemo) playShoot();
+        if (!isDemo) playShoot();
       }
       if (c.fireCD > 0) c.fireCD--;
 
@@ -596,7 +596,7 @@ export default function AsteroidsGame() {
                 size: rand(2.5, a.size === 'large' ? 7 : 5), kind: 'debris',
               });
             }
-            if (Platform.OS === 'web' && !isDemo) playExplosion(a.size);
+            if (!isDemo) playExplosion(a.size);
             if (a.size === 'large') {
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
               born.push(mkAsteroid(W, H, 'medium', undefined, undefined, a.x, a.y));
@@ -650,7 +650,7 @@ export default function AsteroidsGame() {
             angle: (Math.atan2(evy, evx) * 180) / Math.PI,
           });
           e.fireCD = enemyFireCDForLevel(g.level) + Math.floor(rand(0, 40));
-          if (Platform.OS === 'web') playEnemyShoot();
+          playEnemyShoot();
         }
       }
 
@@ -735,7 +735,7 @@ export default function AsteroidsGame() {
                   life: dLife, maxLife: dLife, size: rand(2.5, 6), kind: 'debris',
                 });
               }
-              if (Platform.OS === 'web' && !isDemo) playExplosion('medium');
+              if (!isDemo) playExplosion('medium');
             }
           }
         }
@@ -753,11 +753,11 @@ export default function AsteroidsGame() {
         }
         g.lives--;
         if (g.lives <= 0) {
-          if (Platform.OS === 'web' && thrustSoundRef.current) {
+          if (thrustSoundRef.current) {
             thrustSoundRef.current.stop();
             thrustSoundRef.current = null;
           }
-          if (Platform.OS === 'web') playShipDestroyed();
+          playShipDestroyed();
           g.phase = 'gameover';
           setNewHS(g.score > useGameUIStore.getState().highScore);
           updateHighScore(g.score);
@@ -770,7 +770,7 @@ export default function AsteroidsGame() {
             date: Date.now(),
           });
         } else {
-          if (Platform.OS === 'web') playShipHit();
+          playShipHit();
           g.sx = W / 2; g.sy = H / 2;
           g.svx = 0; g.svy = 0; g.sAngle = 0;
           g.sInv = INVINCIBLE;
@@ -837,7 +837,7 @@ export default function AsteroidsGame() {
   const initNewGame = (W: number, H: number, flyInTicks?: number) => {
     setNewHS(false);
     // Start thrust sound for intro fly-in
-    if (Platform.OS === 'web' && !thrustSoundRef.current) {
+    if (!thrustSoundRef.current) {
       thrustSoundRef.current = playThrustStart();
     }
     const startSy = flyInTicks ? H - SHIP_SIZE * 1.2 : H + SHIP_SIZE * 2;
@@ -873,11 +873,11 @@ export default function AsteroidsGame() {
   const handleGiveUp = useCallback(() => {
     const g = gsRef.current;
     if (!g || g.phase !== 'playing') return;
-    if (Platform.OS === 'web' && thrustSoundRef.current) {
+    if (thrustSoundRef.current) {
       thrustSoundRef.current.stop();
       thrustSoundRef.current = null;
     }
-    if (Platform.OS === 'web') playShipDestroyed();
+    playShipDestroyed();
     g.phase = 'gameover';
     setNewHS(g.score > useGameUIStore.getState().highScore);
     updateHighScore(g.score);
@@ -895,7 +895,7 @@ export default function AsteroidsGame() {
 
   /* ── Back to menu ── */
   const handleBackToMenu = () => {
-    if (Platform.OS === 'web' && thrustSoundRef.current) {
+    if (thrustSoundRef.current) {
       thrustSoundRef.current.stop();
       thrustSoundRef.current = null;
     }
@@ -926,10 +926,8 @@ export default function AsteroidsGame() {
     setCountNum(n);
     cdScale.setValue(2.2);
     cdOpacity.setValue(1);
-    if (Platform.OS === 'web') {
-      if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
-      else playCountdownGo();
-    }
+    if (n > 0) playCountdownBeep(n as 1 | 2 | 3);
+    else playCountdownGo();
     Animated.parallel([
       Animated.timing(cdScale,   { toValue: n > 0 ? 0.8 : 1.1, duration: 600, useNativeDriver: true }),
       Animated.sequence([
@@ -954,7 +952,7 @@ export default function AsteroidsGame() {
             g.phase = 'playing';
             g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
             g.startTime = Date.now();
-            if (Platform.OS === 'web' && thrustSoundRef.current) {
+            if (thrustSoundRef.current) {
               thrustSoundRef.current.stop(); thrustSoundRef.current = null;
             }
           }
@@ -970,7 +968,7 @@ export default function AsteroidsGame() {
     coinScale.setValue(0.5);
     coinOpacity.setValue(1);
     setInsertPhase('coinanim');
-    if (Platform.OS === 'web') playCoinInsert();
+    playCoinInsert();
 
     Animated.parallel([
       Animated.timing(coinY,     { toValue: targetY, duration: 520, useNativeDriver: true }),

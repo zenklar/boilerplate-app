@@ -1,278 +1,160 @@
-// Web Audio API synthesis — classic arcade sounds, web-only.
-let _ctx: AudioContext | null = null;
+/* Native (Android / iOS) arcade sound playback.
+ *
+ * The web build uses utils/sounds.web.ts (Web Audio API synthesis). React
+ * Native has no Web Audio, so we ship pre-rendered WAVs in assets/sounds and
+ * play them with expo-audio. The WAVs are produced by
+ * scripts/generateSoundAssets.js using the same DSP math as the web version.
+ *
+ * Each non-loop sound gets a small player pool so rapid retriggers (multiple
+ * bullets, overlapping explosions) don't truncate each other. */
 
-function ac(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  const AC = (window as any).AudioContext ?? (window as any).webkitAudioContext;
-  if (!AC) return null;
-  if (!_ctx) _ctx = new AC() as AudioContext;
-  if (_ctx.state === 'suspended') _ctx.resume();
-  return _ctx;
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
+
+// One-time audio-mode init. We want game sounds to mix with the silent switch
+// on iOS (playsInSilentMode), not interrupt music, and to keep playing while
+// the device is in silent mode so the user actually hears the SFX.
+let _modeInit = false;
+function ensureAudioMode() {
+  if (_modeInit) return;
+  _modeInit = true;
+  // setAudioModeAsync is async but we don't await — first sound may have to
+  // wait a frame for the mode to settle, which is fine.
+  setAudioModeAsync({
+    playsInSilentMode: true,
+    allowsRecording: false,
+    interruptionMode: 'mixWithOthers',
+    shouldPlayInBackground: false,
+  }).catch(() => { /* silent — sounds will still play with default mode */ });
 }
 
-// Shared compressor/limiter so we can boost explosion volumes without hard clipping
-let _comp: DynamicsCompressorNode | null = null;
-function comp(): DynamicsCompressorNode {
-  const a = ac()!;
-  if (!_comp) {
-    _comp = a.createDynamicsCompressor();
-    _comp.threshold.value = -4;
-    _comp.knee.value = 2;
-    _comp.ratio.value = 8;
-    _comp.attack.value = 0.001;
-    _comp.release.value = 0.12;
-    _comp.connect(a.destination);
+// Pool size per sound — small enough to keep memory low, large enough that
+// the player can rapidly retrigger (e.g. firing in Asteroids).
+const POOL_SIZE = 4;
+
+type Pool = {
+  players: AudioPlayer[];
+  next: number;
+};
+
+const pools = new Map<string, Pool>();
+
+function getPool(id: string, source: number, size = POOL_SIZE): Pool {
+  let p = pools.get(id);
+  if (!p) {
+    const players: AudioPlayer[] = [];
+    for (let i = 0; i < size; i++) {
+      try {
+        players.push(createAudioPlayer(source));
+      } catch (_) { /* if creation fails the sound is silently skipped */ }
+    }
+    p = { players, next: 0 };
+    pools.set(id, p);
   }
-  return _comp;
+  return p;
 }
 
-/** Short square-wave blip — classic laser shot */
+function trigger(id: string, source: number, volume = 1, size = POOL_SIZE) {
+  ensureAudioMode();
+  const pool = getPool(id, source, size);
+  if (pool.players.length === 0) return;
+  const player = pool.players[pool.next];
+  pool.next = (pool.next + 1) % pool.players.length;
+  try {
+    player.volume = volume;
+    // seekTo(0) then play() retriggers from the start; needed because the
+    // player retains its previous position after a play-to-end.
+    player.seekTo(0);
+    player.play();
+  } catch (_) { /* swallow — never let a sound failure crash the game */ }
+}
+
+/* ── Bundled sources ─────────────────────────────────────────────────────
+ * Static require() so Metro can resolve the assets at bundle time. */
+const SND = {
+  shoot:           require('../assets/sounds/shoot.wav'),
+  enemyShoot:      require('../assets/sounds/enemy_shoot.wav'),
+  coinInsert:      require('../assets/sounds/coin_insert.wav'),
+  coinCollect:     require('../assets/sounds/coin_collect.wav'),
+  countdown1:      require('../assets/sounds/countdown_1.wav'),
+  countdown2:      require('../assets/sounds/countdown_2.wav'),
+  countdown3:      require('../assets/sounds/countdown_3.wav'),
+  countdownGo:     require('../assets/sounds/countdown_go.wav'),
+  shipHit:         require('../assets/sounds/ship_hit.wav'),
+  shipDestroyed:   require('../assets/sounds/ship_destroyed.wav'),
+  explosionSmall:  require('../assets/sounds/explosion_small.wav'),
+  explosionMedium: require('../assets/sounds/explosion_medium.wav'),
+  explosionLarge:  require('../assets/sounds/explosion_large.wav'),
+  thrustLoop:      require('../assets/sounds/thrust_loop.wav'),
+};
+
+/* ── Public API — same signatures as utils/sounds.web.ts ─────────────────── */
+
 export function playShoot(): void {
-  const a = ac(); if (!a) return;
-  const osc = a.createOscillator();
-  const gain = a.createGain();
-  osc.connect(gain); gain.connect(comp());
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(640, a.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(90, a.currentTime + 0.1);
-  gain.gain.setValueAtTime(0.22, a.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.1);
-  osc.start(a.currentTime);
-  osc.stop(a.currentTime + 0.11);
+  trigger('shoot', SND.shoot, 1);
 }
 
-/** Lower, growlier triangle-wave shot used by enemies — easy to tell apart
- *  from the player's bright square-wave laser. */
 export function playEnemyShoot(): void {
-  const a = ac(); if (!a) return;
-  const osc = a.createOscillator();
-  const gain = a.createGain();
-  osc.connect(gain); gain.connect(comp());
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(220, a.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(60, a.currentTime + 0.18);
-  gain.gain.setValueAtTime(0.18, a.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.18);
-  osc.start(a.currentTime);
-  osc.stop(a.currentTime + 0.2);
+  trigger('enemyShoot', SND.enemyShoot, 1);
 }
 
-/** Start a continuous filtered-noise thruster rumble. Call stop() to silence it. */
-export function playThrustStart(): { stop: () => void } {
-  const a = ac();
-  if (!a) return { stop: () => {} };
-
-  const bufLen = a.sampleRate * 2;
-  const buf = a.createBuffer(1, bufLen, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) d[i] = Math.random() * 2 - 1;
-
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-
-  const filt = a.createBiquadFilter();
-  filt.type = 'bandpass';
-  filt.frequency.value = 75;
-  filt.Q.value = 0.7;
-
-  const gain = a.createGain();
-  gain.gain.setValueAtTime(0, a.currentTime);
-  gain.gain.linearRampToValueAtTime(0.14, a.currentTime + 0.08);
-
-  src.connect(filt); filt.connect(gain); gain.connect(comp());
-  src.start();
-
-  return {
-    stop: () => {
-      const now = a.currentTime;
-      gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0, now + 0.06);
-      setTimeout(() => { try { src.stop(); } catch (_) {} }, 120);
-    },
-  };
-}
-
-/** Classic two-tone arcade coin insert */
 export function playCoinInsert(): void {
-  const a = ac(); if (!a) return;
-  const tones = [880, 1320];
-  tones.forEach((freq, i) => {
-    const osc = a.createOscillator();
-    const gain = a.createGain();
-    osc.connect(gain); gain.connect(comp());
-    osc.type = 'square';
-    const t = a.currentTime + i * 0.055;
-    osc.frequency.setValueAtTime(freq, t);
-    osc.frequency.setValueAtTime(freq * 1.15, t + 0.012);
-    gain.gain.setValueAtTime(0.28, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-    osc.start(t); osc.stop(t + 0.1);
-  });
+  // Two-tone insert is baked into the WAV; small pool since this is one-shot
+  // and unlikely to overlap.
+  trigger('coinInsert', SND.coinInsert, 1, 2);
 }
 
-/** Jubilant ascending arpeggio — played when daily reward coins are collected */
 export function playCoinCollect(): void {
-  const a = ac(); if (!a) return;
-  // Rising major arpeggio: C5 E5 G5 C6 with a final sparkle
-  const notes = [523, 659, 784, 1047, 1319];
-  notes.forEach((freq, i) => {
-    const osc = a.createOscillator();
-    const gain = a.createGain();
-    osc.connect(gain); gain.connect(comp());
-    osc.type = i < 4 ? 'square' : 'sine';
-    const t = a.currentTime + i * 0.07;
-    osc.frequency.setValueAtTime(freq, t);
-    osc.frequency.setValueAtTime(freq * 1.04, t + 0.015);
-    gain.gain.setValueAtTime(0.22, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-    osc.start(t); osc.stop(t + 0.2);
-  });
+  trigger('coinCollect', SND.coinCollect, 1, 2);
 }
 
-/** Single countdown beep — higher pitch for final tick */
 export function playCountdownBeep(n: 3 | 2 | 1): void {
-  const a = ac(); if (!a) return;
-  const freq = n === 1 ? 1100 : 660;
-  const dur  = n === 1 ? 0.18 : 0.12;
-  const osc = a.createOscillator();
-  const gain = a.createGain();
-  osc.connect(gain); gain.connect(comp());
-  osc.type = 'square';
-  osc.frequency.value = freq;
-  gain.gain.setValueAtTime(0.22, a.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
-  osc.start(a.currentTime); osc.stop(a.currentTime + dur + 0.01);
+  const src = n === 1 ? SND.countdown1 : n === 2 ? SND.countdown2 : SND.countdown3;
+  trigger(`countdown${n}`, src, 1, 2);
 }
 
-/** Ascending arpeggio for GO! */
 export function playCountdownGo(): void {
-  const a = ac(); if (!a) return;
-  [440, 554, 659, 880].forEach((freq, i) => {
-    const osc = a.createOscillator();
-    const gain = a.createGain();
-    osc.connect(gain); gain.connect(comp());
-    osc.type = 'square';
-    osc.frequency.value = freq;
-    const t = a.currentTime + i * 0.045;
-    gain.gain.setValueAtTime(0.25, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
-    osc.start(t); osc.stop(t + 0.15);
-  });
+  trigger('countdownGo', SND.countdownGo, 1, 2);
 }
 
-/** Sharp descending wail when the ship takes a hit but survives */
 export function playShipHit(): void {
-  const a = ac(); if (!a) return;
-
-  // Sawtooth sweep: 880 → 110 Hz over 0.4 s
-  const osc = a.createOscillator();
-  const gain = a.createGain();
-  osc.connect(gain); gain.connect(comp());
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(880, a.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(110, a.currentTime + 0.38);
-  gain.gain.setValueAtTime(0.48, a.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.38);
-  osc.start(a.currentTime);
-  osc.stop(a.currentTime + 0.40);
-
-  // Short high noise burst
-  const bufLen = Math.round(a.sampleRate * 0.10);
-  const buf = a.createBuffer(1, bufLen, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 0.7);
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  const nfilt = a.createBiquadFilter();
-  nfilt.type = 'bandpass'; nfilt.frequency.value = 1400; nfilt.Q.value = 0.6;
-  const ng = a.createGain(); ng.gain.value = 0.55;
-  src.connect(nfilt); nfilt.connect(ng); ng.connect(comp());
-  src.start();
+  trigger('shipHit', SND.shipHit, 1, 2);
 }
 
-/** Dramatic destruction sound — layered noise burst + deep descending wail */
 export function playShipDestroyed(): void {
-  const a = ac(); if (!a) return;
-
-  // Noise explosion — same approach as large asteroid but bigger
-  const dur = 1.1;
-  const bufLen = Math.round(a.sampleRate * dur);
-  const buf = a.createBuffer(1, bufLen, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 0.85);
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  const filt = a.createBiquadFilter();
-  filt.type = 'lowpass'; filt.frequency.value = 800; filt.Q.value = 0.3;
-  const gain = a.createGain(); gain.gain.value = 1.8;
-  src.connect(filt); filt.connect(gain); gain.connect(comp());
-  src.start();
-
-  // Sub-bass pitch drop: 140 → 18 Hz (the "ship dying" tone)
-  const osc1 = a.createOscillator();
-  const og1 = a.createGain();
-  osc1.type = 'sine';
-  osc1.frequency.setValueAtTime(140, a.currentTime);
-  osc1.frequency.exponentialRampToValueAtTime(18, a.currentTime + dur * 0.7);
-  og1.gain.setValueAtTime(1.2, a.currentTime);
-  og1.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur * 0.65);
-  osc1.connect(og1); og1.connect(comp());
-  osc1.start(); osc1.stop(a.currentTime + dur);
-
-  // High sawtooth wail 600 → 80 Hz — gives it the "dying spaceship" character
-  const osc2 = a.createOscillator();
-  const og2 = a.createGain();
-  osc2.type = 'sawtooth';
-  osc2.frequency.setValueAtTime(600, a.currentTime + 0.06);
-  osc2.frequency.exponentialRampToValueAtTime(80, a.currentTime + 0.85);
-  og2.gain.setValueAtTime(0.4, a.currentTime + 0.06);
-  og2.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.85);
-  osc2.connect(og2); og2.connect(comp());
-  osc2.start(a.currentTime + 0.06); osc2.stop(a.currentTime + 0.86);
+  trigger('shipDestroyed', SND.shipDestroyed, 1, 2);
 }
 
 export function playExplosion(size: 'small' | 'medium' | 'large'): void {
-  const a = ac(); if (!a) return;
-  const dur  = size === 'large' ? 0.85 : size === 'medium' ? 0.48 : 0.24;
-  const vol  = size === 'large' ? 1.4  : size === 'medium' ? 0.95 : 0.55;
-  const cutoff = size === 'large' ? 500 : size === 'medium' ? 1000 : 2200;
+  const src = size === 'large'  ? SND.explosionLarge
+            : size === 'medium' ? SND.explosionMedium
+            : SND.explosionSmall;
+  trigger(`explosion-${size}`, src, 1);
+}
 
-  // White noise with amplitude envelope baked in
-  const bufLen = Math.round(a.sampleRate * dur);
-  const buf = a.createBuffer(1, bufLen, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < bufLen; i++) {
-    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 1.1);
+/** Looping thruster rumble. Returns a handle with stop() to silence it. */
+export function playThrustStart(): { stop: () => void } {
+  ensureAudioMode();
+  // Single dedicated player so we can loop + stop deterministically.
+  let player: AudioPlayer | null = null;
+  try {
+    player = createAudioPlayer(SND.thrustLoop);
+    player.loop = true;
+    player.volume = 0.7;
+    player.seekTo(0);
+    player.play();
+  } catch (_) {
+    return { stop: () => {} };
   }
-
-  const src = a.createBufferSource();
-  src.buffer = buf;
-
-  // Wider lowpass than before — preserves more energy
-  const filt = a.createBiquadFilter();
-  filt.type = 'lowpass';
-  filt.frequency.value = cutoff;
-  filt.Q.value = 0.4;
-
-  const gain = a.createGain();
-  gain.gain.value = vol;
-
-  src.connect(filt); filt.connect(gain); gain.connect(comp());
-  src.start();
-
-  // Sub-bass pitch-drop tone for large/medium — the classic arcade "boom"
-  if (size !== 'small') {
-    const osc = a.createOscillator();
-    const og = a.createGain();
-    osc.type = 'sine';
-    const startFreq = size === 'large' ? 90 : 160;
-    osc.frequency.setValueAtTime(startFreq, a.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(18, a.currentTime + dur * 0.55);
-    og.gain.setValueAtTime(vol * 0.7, a.currentTime);
-    og.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur * 0.5);
-    osc.connect(og); og.connect(comp());
-    osc.start(a.currentTime);
-    osc.stop(a.currentTime + dur);
-  }
+  return {
+    stop: () => {
+      if (!player) return;
+      try {
+        player.pause();
+        // Defer remove() so an in-flight play() call doesn't error.
+        const p = player;
+        setTimeout(() => { try { p.remove(); } catch (_) {} }, 50);
+      } catch (_) { /* ignore */ }
+      player = null;
+    },
+  };
 }
