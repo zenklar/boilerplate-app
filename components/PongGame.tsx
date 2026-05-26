@@ -814,7 +814,7 @@ export default function PongGame() {
       {/* Title + INSERT COIN — positioned in the reserved space ABOVE and
           BELOW the frame, mirroring Tetris/Snake. */}
       {isDemoLayout && (
-        <View style={s.overlay} pointerEvents="box-none">
+        <>
           <View style={[s.overlayTop, { height: DEMO_RESERVE_TOP }]} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>PONG</Text>
             {highScore > 0 && (
@@ -838,7 +838,7 @@ export default function PongGame() {
                 : 'Drag to move  ·  tap BOOST to smash'}
             </Text>
           </View>
-        </View>
+        </>
       )}
 
       {/* Give up button (mobile) */}
@@ -901,12 +901,8 @@ const s = StyleSheet.create({
     textAlign: 'center', letterSpacing: 4,
   },
 
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between', alignItems: 'center',
-  },
-  overlayTop:    { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingTop: 30 },
-  overlayBottom: { alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingBottom: 20 },
+  overlayTop:    { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 30 },
+  overlayBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 20 },
 
   boostBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,

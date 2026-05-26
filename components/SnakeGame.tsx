@@ -473,7 +473,7 @@ export default function SnakeGame() {
 
       {/* ── Title / demo overlay ── */}
       {(phase === 'idle' || phase === 'demo') && (
-        <View style={s.overlay} pointerEvents="box-none">
+        <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>SNAKE</Text>
             {highScore > 0 && (
@@ -497,7 +497,7 @@ export default function SnakeGame() {
               </Text>
             )}
           </View>
-        </View>
+        </>
       )}
 
       {/* ── Coin insert animation ── */}
@@ -624,13 +624,14 @@ const s = StyleSheet.create({
   hudLabel: { color: '#2D6010', fontSize: 9, letterSpacing: 2 },
   hudValue: { color: '#4ED31F', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
 
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 40, paddingBottom: 50,
+  overlayTop: {
+    position: 'absolute', top: 40, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
   },
-  overlayTop:    { alignItems: 'center', gap: 10 },
-  overlayBottom: { alignItems: 'center', gap: 10 },
+  overlayBottom: {
+    position: 'absolute', bottom: 50, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
+  },
 
   titleText: {
     color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 10,

@@ -1385,7 +1385,7 @@ export default function AsteroidsGame() {
       {/* ── Idle / title screen — sibling of the canvas so the title can sit
             above the boxed preview and INSERT COIN can sit below it. ── */}
       {isDemoLayout && (
-        <View style={s.overlay} pointerEvents="box-none">
+        <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>ASTEROIDS</Text>
             {highScore > 0 && (
@@ -1406,7 +1406,7 @@ export default function AsteroidsGame() {
               </Text>
             )}
           </View>
-        </View>
+        </>
       )}
     </View>
   );
@@ -1470,13 +1470,14 @@ const s = StyleSheet.create({
 
   // Title/idle overlay — transparent so the autoplay demo shows through.
   // Title pinned to the top, button + hints pinned to the bottom.
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 40, paddingBottom: 50,
+  overlayTop: {
+    position: 'absolute', top: 40, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
   },
-  overlayTop: { alignItems: 'center', gap: 10 },
-  overlayBottom: { alignItems: 'center', gap: 10 },
+  overlayBottom: {
+    position: 'absolute', bottom: 50, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
+  },
   // Game-over overlay — solid black so nothing bleeds through
   gameOverOverlay: {
     ...StyleSheet.absoluteFillObject,

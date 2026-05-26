@@ -58,7 +58,7 @@ export default function GameShell<TabId extends string>({
   return (
     <View style={s.root}>
       {chrome && (
-        <View style={[s.header, { paddingTop: insets.top }]}>
+        <View style={[s.header, { paddingTop: insets.top, height: HEADER_H + insets.top }]}>
           <Text style={[s.headerTitle, { fontFamily: MONO }]}>{current.title}</Text>
           <View style={s.coinCounter}>
             <ArcadeCoin size={22} />

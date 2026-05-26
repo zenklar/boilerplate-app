@@ -801,7 +801,7 @@ export default function TetrisGame() {
 
       {/* ── Title / idle overlay (sits over the autoplay demo) ── */}
       {(phase === 'idle' || phase === 'demo') && (
-        <View style={s.overlay} pointerEvents="box-none">
+        <>
           <View style={s.overlayTop} pointerEvents="box-none">
             <Text style={[s.titleText, { fontFamily: MONO }]}>TETRIS</Text>
             {highScore > 0 && (
@@ -822,7 +822,7 @@ export default function TetrisGame() {
               </Text>
             )}
           </View>
-        </View>
+        </>
       )}
 
       {/* Coin insert animation */}
@@ -946,13 +946,14 @@ const s = StyleSheet.create({
     position: 'relative',
   },
 
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 40, paddingBottom: 50,
+  overlayTop: {
+    position: 'absolute', top: 40, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
   },
-  overlayTop: { alignItems: 'center', gap: 10 },
-  overlayBottom: { alignItems: 'center', gap: 10 },
+  overlayBottom: {
+    position: 'absolute', bottom: 50, left: 0, right: 0,
+    alignItems: 'center', gap: 10,
+  },
   titleText: {
     color: '#FFF', fontSize: 34, fontWeight: '800', letterSpacing: 8,
     textShadowColor: '#000', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8,
