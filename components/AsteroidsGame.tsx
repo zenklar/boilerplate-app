@@ -218,6 +218,17 @@ function mkEnemy(W: number, H: number, lvl: number, avoidX: number, avoidY: numb
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
+/** Static asteroid polygon. Props never change after the asteroid spawns
+ *  (radius and pts are immutable), so React.memo lets the inner SVG skip
+ *  reconcile on every game tick — only the outer transform changes. */
+const AsteroidShape = React.memo(function AsteroidShape({ d, pts }: { d: number; pts: string }) {
+  return (
+    <Svg width={d} height={d}>
+      <Polygon points={pts} fill="white" stroke="#CCC" strokeWidth={1.5} />
+    </Svg>
+  );
+});
+
 /** Demo-mode AI: rotates the ship toward the nearest asteroid (with bullet
  *  lead) and fires when aligned. Ship doesn't thrust — it drifts only after a
  *  collision teleport. */
@@ -380,6 +391,14 @@ export default function AsteroidsGame() {
   }, []);
 
   /* ── Single long-running game loop ── */
+  // On Android we still SIMULATE at 60 Hz, but only push a React render every
+  // other frame (30 fps display). The game state lives in gsRef.current so
+  // physics stays accurate; React just paints at half the rate, which cuts
+  // reconcile + Yoga + view-bridge cost in half on slow devices/emulators.
+  const ANDROID_HALF_RENDER = Platform.OS === 'android';
+  // On Android cap the particle pool — particle storms during combat were a
+  // dominant cause of frame drops on lower-end devices.
+  const MAX_PARTICLES = Platform.OS === 'android' ? 60 : 240;
   useEffect(() => {
     const id = setInterval(() => {
       const { w: W, h: H } = dimRef.current;
@@ -796,6 +815,14 @@ export default function AsteroidsGame() {
         g.asteroids = mkLevel(1, W, H, g.sx, g.sy);
       }
 
+      // Trim oversized particle pools (Android cap). Drop the oldest first so
+      // the visual fade-out is uninterrupted.
+      if (g.particles.length > MAX_PARTICLES) {
+        g.particles.splice(0, g.particles.length - MAX_PARTICLES);
+      }
+
+      // Render at half rate on Android (simulation already ran above).
+      if (ANDROID_HALF_RENDER && (frame.current & 1) !== 0) return;
       setTick((t) => t + 1);
     }, TICK_MS);
 
@@ -1180,9 +1207,7 @@ export default function AsteroidsGame() {
               }}
               pointerEvents="none"
             >
-              <Svg width={d} height={d}>
-                <Polygon points={a.pts} fill="white" stroke="#CCC" strokeWidth={1.5} />
-              </Svg>
+              <AsteroidShape d={d} pts={a.pts} />
             </View>
           );
         })}

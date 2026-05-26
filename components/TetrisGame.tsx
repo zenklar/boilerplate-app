@@ -340,13 +340,21 @@ export default function TetrisGame() {
   }, [phase]);
 
   /* ── Game loop ── */
+  // Android render-skip — see AsteroidsGame for the rationale. Tetris's
+  // locked-board layer is already memoised, but skipping React render on
+  // alternate ticks still removes a meaningful chunk of work per second.
+  const ANDROID_HALF_RENDER = Platform.OS === 'android';
+  const tickFrame = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
       if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
       if (!g) return;
+      tickFrame.current++;
 
       const isDemo = phase === 'demo';
+
+      const shouldRender = !ANDROID_HALF_RENDER || (tickFrame.current & 1) === 0;
 
       // Line-clear flash: hold the cleared rows visible briefly, then collapse.
       if (g.flashTimer > 0) {
@@ -357,11 +365,11 @@ export default function TetrisGame() {
           g.flashRows = [];
           spawnNext(isDemo);
         }
-        setTick((t) => t + 1);
+        if (shouldRender) setTick((t) => t + 1);
         return;
       }
 
-      if (!g.active) { setTick((t) => t + 1); return; }
+      if (!g.active) { if (shouldRender) setTick((t) => t + 1); return; }
 
       // Demo AI: rotate toward target, slide toward target x, then drop.
       // Throttled by demoStepCD so the preview is calm and readable.
@@ -386,7 +394,7 @@ export default function TetrisGame() {
             g.active = { ...g.active, y: dropY };
             lockPiece(true);
             g.demoStepCD = DEMO_LOCK_PAUSE;
-            setTick((tt) => tt + 1);
+            if (shouldRender) setTick((tt) => tt + 1);
             return;
           }
         }
@@ -433,7 +441,7 @@ export default function TetrisGame() {
           lockPiece(isDemo);
         }
       }
-      setTick((t) => t + 1);
+      if (shouldRender) setTick((t) => t + 1);
     }, TICK_MS);
     return () => clearInterval(id);
   }, [phase]);

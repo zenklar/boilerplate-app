@@ -492,6 +492,9 @@ export default function PongGame() {
         }
       }
 
+      // Android: render at half rate (simulation still ran above). Halves
+      // React reconcile cost on slower devices/emulators.
+      if (Platform.OS === 'android' && (tickCount.current & 1) !== 0) return;
       setTick((t) => t + 1);
     }, TICK_MS);
     return () => clearInterval(id);
