@@ -484,8 +484,17 @@ export default function AsteroidsGame() {
 
       /* Friction & move */
       g.svx *= FRICTION; g.svy *= FRICTION;
-      g.sx = wrap(g.sx + g.svx, W);
-      g.sy = wrap(g.sy + g.svy, H);
+      if (isDemo) {
+        // Keep the demo ship anchored at center so the preview composition
+        // stays clean and consistent across platforms.
+        g.sx = W / 2;
+        g.sy = H / 2;
+        g.svx = 0;
+        g.svy = 0;
+      } else {
+        g.sx = wrap(g.sx + g.svx, W);
+        g.sy = wrap(g.sy + g.svy, H);
+      }
       if (g.sInv > 0) g.sInv--;
 
       /* Fire */
@@ -954,14 +963,16 @@ export default function AsteroidsGame() {
   /* ── Layout handler ── */
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
+    const measuredW = width > 2 ? width : demoBoardPxW;
+    const measuredH = height > 2 ? height : demoBoardPxH;
     // Reserve space for the mobile joystick/fire bar only when we're actually
     // about to render them — i.e. during gameplay. In demo / idle the bar is
     // hidden, so the game world should use the full canvas height (otherwise
     // the ship is rendered at the upper half of the preview frame).
     const reserveBottom = isDemoLayout ? 0 : CTRL_H;
-    const gameH = Math.max(1, height - reserveBottom);
-    dimRef.current = { w: width, h: gameH };
-    setArea({ w: width, h: height });
+    const gameH = Math.max(1, measuredH - reserveBottom);
+    dimRef.current = { w: measuredW, h: gameH };
+    setArea({ w: measuredW, h: measuredH });
 
     // Measure root position for web mouse-to-canvas coordinate conversion
     if (Platform.OS === 'web' && rootRef.current) {
@@ -970,17 +981,17 @@ export default function AsteroidsGame() {
       });
     }
 
-    if (pendingStart.current && width > 0 && height > 0) {
+    if (pendingStart.current && measuredW > 0 && measuredH > 0) {
       pendingStart.current = false;
       const ft = pendingFlyInTicks.current;
       pendingFlyInTicks.current = undefined;
-      initNewGame(width, gameH, ft);
-    } else if (!gsRef.current && width > 0 && height > 0 && gameAreaSize.w > 0) {
-      const sx = width / 2, sy = gameH / 2;
+      initNewGame(measuredW, gameH, ft);
+    } else if (!gsRef.current && measuredW > 0 && measuredH > 0) {
+      const sx = measuredW / 2, sy = gameH / 2;
       gsRef.current = {
         phase: 'demo',
         sx, sy, svx: 0, svy: 0, sAngle: 0, sInv: 0,
-        bullets: [], particles: [], asteroids: mkLevel(1, width, gameH, sx, sy),
+        bullets: [], particles: [], asteroids: mkLevel(1, measuredW, gameH, sx, sy),
         enemies: [], enemyBullets: [],
         score: 0, lives: 3, level: 1,
         bulletsShot: 0, asteroidsDestroyed: 0, startTime: 0,
@@ -1043,6 +1054,39 @@ export default function AsteroidsGame() {
   const demoBoardPxW = preview.w;
   const demoBoardPxH = preview.h;
 
+  // Fallback demo bootstrapping for platforms/layout timing where the canvas
+  // onLayout may not initialize gsRef immediately.
+  useEffect(() => {
+    if (!isDemoLayout) return;
+    if (gsRef.current) return;
+    if (demoBoardPxW <= 0 || demoBoardPxH <= 0) return;
+
+    const sx = demoBoardPxW / 2;
+    const sy = demoBoardPxH / 2;
+    dimRef.current = { w: demoBoardPxW, h: demoBoardPxH };
+    gsRef.current = {
+      phase: 'demo',
+      sx,
+      sy,
+      svx: 0,
+      svy: 0,
+      sAngle: 0,
+      sInv: 0,
+      bullets: [],
+      particles: [],
+      asteroids: mkLevel(1, demoBoardPxW, demoBoardPxH, sx, sy),
+      enemies: [],
+      enemyBullets: [],
+      score: 0,
+      lives: 3,
+      level: 1,
+      bulletsShot: 0,
+      asteroidsDestroyed: 0,
+      startTime: 0,
+    };
+    setTick((t) => t + 1);
+  }, [isDemoLayout, demoBoardPxW, demoBoardPxH]);
+
   return (
     <View ref={rootRef} style={s.root}>
       {/* ── Measurement + centering wrapper (mirrors TetrisGame's gameArea) ── */}
@@ -1054,6 +1098,7 @@ export default function AsteroidsGame() {
           {
             paddingTop: isDemoLayout ? 160 : 0,
             paddingBottom: isDemoLayout ? 150 : 0,
+            justifyContent: isDemoLayout ? 'center' : 'flex-start',
             alignItems: isDemoLayout ? 'center' : 'stretch',
           },
         ]}
@@ -1074,18 +1119,22 @@ export default function AsteroidsGame() {
           {
             width: isDemoLayout ? demoBoardPxW : undefined,
             height: isDemoLayout ? demoBoardPxH : undefined,
+            minWidth: isDemoLayout ? demoBoardPxW : undefined,
+            minHeight: isDemoLayout ? demoBoardPxH : undefined,
+            maxWidth: isDemoLayout ? demoBoardPxW : undefined,
+            maxHeight: isDemoLayout ? demoBoardPxH : undefined,
             flex: isDemoLayout ? 0 : 1,
+            flexShrink: isDemoLayout ? 0 : 1,
+            alignSelf: isDemoLayout ? 'center' : 'stretch',
           },
         ]}
         onLayout={onLayout}
       >
 
-        {/* Game objects — scaled down in demo/preview mode so they look
-            proportional in the smaller frame. Hidden entirely during
-            game-over so the overlay is the only thing on screen. */}
+        {/* Game objects. Hidden entirely during game-over so the overlay is
+            the only thing on screen. */}
         <View style={[
           StyleSheet.absoluteFillObject,
-          { transform: [{ scale: isDemoLayout ? 0.65 : 1 }] },
         ]}>
         {g?.phase !== 'gameover' && <>
 
