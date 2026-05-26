@@ -321,7 +321,8 @@ export default function AsteroidsGame() {
             durationMs: Date.now() - g.startTime,
             date: Date.now(),
           });
-          setIsGamePlaying(false);
+          // Keep chrome hidden through the game-over screen so the overlay
+          // is the only thing on screen; MENU button flips it back.
           setTick((t) => t + 1);
         }
         return;
@@ -825,7 +826,7 @@ export default function AsteroidsGame() {
       durationMs: Date.now() - g.startTime,
       date: Date.now(),
     });
-    setIsGamePlaying(false);
+    // Keep chrome hidden through the game-over screen.
     setTick((t) => t + 1);
   }, [updateHighScore, setIsGamePlaying]);
 
@@ -1481,11 +1482,14 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 50, left: 0, right: 0,
     alignItems: 'center', gap: 10,
   },
-  // Game-over overlay — solid black so nothing bleeds through
+  // Game-over overlay — solid black so nothing bleeds through.
+  // zIndex keeps it above the game canvas + give-up button + controls on
+  // Android new-arch, where sibling stacking can otherwise misbehave.
   gameOverOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
     justifyContent: 'center', alignItems: 'center', gap: 18,
+    zIndex: 50,
   },
 
   titleText: {

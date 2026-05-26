@@ -521,7 +521,8 @@ export default function TetrisGame() {
     });
     if (Platform.OS === 'web') playShipDestroyed();
     setPhase('gameover');
-    setIsGamePlaying(false);
+    // Keep isGamePlaying TRUE through the game-over screen so the GameShell
+    // chrome stays hidden — only handleBackToMenu (MENU button) flips it back.
   }
 
   function startFreshGame() {
@@ -1010,6 +1011,7 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
     justifyContent: 'center', alignItems: 'center', gap: 18,
+    zIndex: 50,
   },
   finalScore: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 6 },
   newHsText: { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },

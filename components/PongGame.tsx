@@ -467,7 +467,8 @@ export default function PongGame() {
       setNewHS(false);
     }
     setPhase('gameover');
-    setIsGamePlaying(false);
+    // Keep isGamePlaying TRUE through the game-over screen so the GameShell
+    // chrome stays hidden — only handleBackToMenu (MENU button) flips it back.
   }
 
   function startFreshGame() {
@@ -777,49 +778,50 @@ export default function PongGame() {
               </Animated.Text>
             </View>
           )}
-
-          {/* Game over */}
-          {phase === 'gameover' && (
-            <View style={s.gameOverOverlay}>
-              <Text style={[
-                s.titleText, { fontFamily: MONO },
-                playerWon ? { color: '#FFD700' } : { color: '#FFF' },
-              ]}>
-                {playerWon ? 'YOU WIN!' : 'YOU LOSE'}
-              </Text>
-              {playerWon ? (
-                <>
-                  <Text style={[s.finalScore, { fontFamily: MONO }]}>
-                    {g?.sessionScore ?? 0}
-                  </Text>
-                  <Text style={[s.hiLabel, { fontFamily: MONO, marginTop: -8 }]}>
-                    SCORE
-                  </Text>
-                  {newHS && (
-                    <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
-                  )}
-                </>
-              ) : (
-                <Text style={[s.hiLabel, { fontFamily: MONO, color: '#888', marginTop: 4 }]}>
-                  SCORE NOT SAVED
-                </Text>
-              )}
-              <View style={s.btnRow}>
-                <Pressable onPress={handleInsertCoin} style={s.goBtn}>
-                  <Text style={[s.goBtnTxt, { fontFamily: MONO }]}>
-                    {(coins > 0 || isSubscribed) ? 'PLAY AGAIN' : 'GET COINS'}
-                  </Text>
-                </Pressable>
-                <Pressable onPress={handleBackToMenu} style={[s.goBtn, s.goBtnSecondary]}>
-                  <Text style={[s.goBtnTxt, s.goBtnSecondaryTxt, { fontFamily: MONO }]}>
-                    MENU
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
         </View>
       </View>
+
+      {/* Game over — root-level overlay so it covers the entire safe area,
+          not just the play frame. */}
+      {phase === 'gameover' && (
+        <View style={s.gameOverOverlay}>
+          <Text style={[
+            s.titleText, { fontFamily: MONO },
+            playerWon ? { color: '#FFD700' } : { color: '#FFF' },
+          ]}>
+            {playerWon ? 'YOU WIN!' : 'YOU LOSE'}
+          </Text>
+          {playerWon ? (
+            <>
+              <Text style={[s.finalScore, { fontFamily: MONO }]}>
+                {g?.sessionScore ?? 0}
+              </Text>
+              <Text style={[s.hiLabel, { fontFamily: MONO, marginTop: -8 }]}>
+                SCORE
+              </Text>
+              {newHS && (
+                <Text style={[s.newHsText, { fontFamily: MONO }]}>NEW HIGH SCORE!</Text>
+              )}
+            </>
+          ) : (
+            <Text style={[s.hiLabel, { fontFamily: MONO, color: '#888', marginTop: 4 }]}>
+              SCORE NOT SAVED
+            </Text>
+          )}
+          <View style={s.btnRow}>
+            <Pressable onPress={handleInsertCoin} style={s.goBtn}>
+              <Text style={[s.goBtnTxt, { fontFamily: MONO }]}>
+                {(coins > 0 || isSubscribed) ? 'PLAY AGAIN' : 'GET COINS'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={handleBackToMenu} style={[s.goBtn, s.goBtnSecondary]}>
+              <Text style={[s.goBtnTxt, s.goBtnSecondaryTxt, { fontFamily: MONO }]}>
+                MENU
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Title + INSERT COIN — positioned in the reserved space ABOVE and
           BELOW the frame, mirroring Tetris/Snake. */}
@@ -957,8 +959,9 @@ const s = StyleSheet.create({
 
   gameOverOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.94)',
+    backgroundColor: '#000',
     justifyContent: 'center', alignItems: 'center', gap: 16,
+    zIndex: 50,
   },
   finalScore: { color: '#FFF', fontSize: 48, fontWeight: '700', letterSpacing: 4 },
   newHsText:  { color: '#FFD700', fontSize: 15, fontWeight: '700', letterSpacing: 3 },
