@@ -1039,25 +1039,42 @@ export default function AsteroidsGame() {
       <View
         style={[
           s.gameArea,
-          isDemoLayout && { paddingTop: 160, paddingBottom: 150, alignItems: 'center' },
+          // Explicit values in both branches so Yoga clears them on transition
+          // (otherwise the demo padding sticks after demo→play on Android).
+          {
+            paddingTop: isDemoLayout ? 160 : 0,
+            paddingBottom: isDemoLayout ? 150 : 0,
+            alignItems: isDemoLayout ? 'center' : 'stretch',
+          },
         ]}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
           setGameAreaSize({ w: width, h: height });
         }}
       >
-      {/* ── Game canvas — full-screen during play, boxed during demo ── */}
+      {/* ── Game canvas — full-screen during play, boxed during demo ──
+            We MUST set width/height/flex explicitly (rather than conditionally
+            spreading them) so Yoga clears them when switching modes. Otherwise
+            on Android new-arch the demo box dimensions stick after demo→play
+            transition and the canvas stays small at the top of the screen. */}
       <View
         style={[
           s.canvas,
           isDemoLayout && s.canvasDemo,
-          isDemoLayout && { width: demoBoardPxW, height: demoBoardPxH, flex: undefined },
+          {
+            width: isDemoLayout ? demoBoardPxW : undefined,
+            height: isDemoLayout ? demoBoardPxH : undefined,
+            flex: isDemoLayout ? 0 : 1,
+          },
         ]}
         onLayout={onLayout}
       >
 
         {/* Game objects — scaled down in demo/preview mode so they look proportional in the smaller frame */}
-        <View style={[StyleSheet.absoluteFillObject, isDemoLayout && { transform: [{ scale: 0.65 }] }]}>
+        <View style={[
+          StyleSheet.absoluteFillObject,
+          { transform: [{ scale: isDemoLayout ? 0.65 : 1 }] },
+        ]}>
 
         {/* Asteroids — jagged polygons via react-native-svg (works on web too) */}
         {g?.asteroids.map((a) => {

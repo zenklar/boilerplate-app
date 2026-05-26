@@ -691,10 +691,10 @@ export default function TetrisGame() {
       {/* Game area */}
       <View style={[
         s.gameArea,
-        isDemoLayout && {
-          paddingTop: demoReserveTop,
-          paddingBottom: demoReserveBottom,
-          justifyContent: 'center',
+        {
+          paddingTop: isDemoLayout ? demoReserveTop : 0,
+          paddingBottom: isDemoLayout ? demoReserveBottom : 0,
+          justifyContent: isDemoLayout ? 'center' : 'flex-start',
         },
       ]}>
         {/* Board — Pressable so a left click rotates CW */}

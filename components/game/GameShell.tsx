@@ -78,7 +78,12 @@ export default function GameShell<TabId extends string>({
           s.content,
           // When chrome is hidden the canvas would otherwise extend under the
           // Android status bar and the iOS notch / Android gesture bar.
-          !chrome && { paddingTop: insets.top, paddingBottom: insets.bottom },
+          // Specify both branches explicitly so Yoga clears the padding when
+          // toggling — conditional spreads can leave stale values on Android.
+          {
+            paddingTop: !chrome ? insets.top : 0,
+            paddingBottom: !chrome ? insets.bottom : 0,
+          },
         ]}
       >
         {children}

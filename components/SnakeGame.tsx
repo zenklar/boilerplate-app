@@ -404,7 +404,10 @@ export default function SnakeGame() {
       {/* ── Game area ── */}
       <View style={[
         s.gameArea,
-        isDemoLayout && { paddingTop: demoReserveTop, paddingBottom: demoReserveBottom },
+        {
+          paddingTop: isDemoLayout ? demoReserveTop : 0,
+          paddingBottom: isDemoLayout ? demoReserveBottom : 0,
+        },
       ]}>
 
         {/* Score HUD (visible during active play) */}
