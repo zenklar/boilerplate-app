@@ -657,7 +657,9 @@ export default function TetrisGame() {
   // During demo / idle the outer frame is the shared preview box (same exact
   // size as every other arcade title); during gameplay we let the board fill
   // the available area normally.
-  const preview = fitPreview(area.w, playableH);
+  // Use full area.h for the demo preview (controls aren't shown then) so the
+  // preview matches Asteroids which measures its gameArea without CTRL_H.
+  const preview = fitPreview(area.w, isDemoLayout ? area.h : playableH);
   const maxByW = (isDemoLayout ? preview.w : area.w - sidePanelW - 40) / BOARD_W;
   const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));

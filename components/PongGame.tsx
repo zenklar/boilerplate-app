@@ -565,7 +565,9 @@ export default function PongGame() {
   let frameW: number;
   let frameH: number;
   if (isDemoLayout) {
-    const preview = fitPreview(area.w, playableH);
+    // Use full area.h (controls aren't shown during demo) so the preview
+    // matches Asteroids which measures its gameArea without CTRL_H.
+    const preview = fitPreview(area.w, area.h);
     frameW = preview.w;
     frameH = preview.h;
   } else {

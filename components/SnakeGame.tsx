@@ -393,7 +393,9 @@ export default function SnakeGame() {
   const reservedH  = isDemoLayout ? demoReserveTop + demoReserveBottom : 60;
   // Demo / idle uses the shared preview-frame size (same on every game);
   // gameplay uses the natural cell grid filling the available area.
-  const preview = fitPreview(area.w, playableH);
+  // Use full area.h for the demo preview (controls aren't shown then) so the
+  // preview matches Asteroids which measures its gameArea without CTRL_H.
+  const preview = fitPreview(area.w, isDemoLayout ? area.h : playableH);
   const maxByW = (isDemoLayout ? preview.w : area.w - 24) / BOARD_W;
   const maxByH = (isDemoLayout ? preview.h : playableH - reservedH) / BOARD_H;
   const CELL       = Math.max(8, Math.floor(Math.min(maxByW, maxByH)));
