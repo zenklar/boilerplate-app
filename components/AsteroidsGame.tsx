@@ -281,7 +281,7 @@ export default function AsteroidsGame() {
   const mousePos = useRef({ x: 0, y: 0 });
   // Joystick state (mobile)
   const joyActive = useRef(false);
-  const joyCtr = useRef({ x: 0, y: 0 });
+  const joyCtr = useRef({ x: 70, y: 70 });
   const joyOff = useRef({ x: 0, y: 0 });
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
@@ -994,31 +994,35 @@ export default function AsteroidsGame() {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        joyCtr.current = { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY };
-        joyOff.current = { x: 0, y: 0 };
         joyActive.current = true;
+        const rawDx = evt.nativeEvent.locationX - joyCtr.current.x;
+        const rawDy = evt.nativeEvent.locationY - joyCtr.current.y;
+        const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+        const clamped = Math.min(dist, JOY_MAX);
+        const angle = Math.atan2(rawDy, rawDx);
+        joyOff.current = { x: Math.cos(angle) * clamped, y: Math.sin(angle) * clamped };
+        if (dist > JOY_DEAD && gsRef.current) {
+          gsRef.current.sAngle = angle * (180 / Math.PI) + 90;
+        }
       },
-      onPanResponderMove: (_, gs) => {
-        const dx = Math.max(-JOY_MAX, Math.min(JOY_MAX, gs.dx));
-        const dy = Math.max(-JOY_MAX, Math.min(JOY_MAX, gs.dy));
-        joyOff.current = { x: dx, y: dy };
-        ctrl.current.left = dx < -JOY_DEAD;
-        ctrl.current.right = dx > JOY_DEAD;
-        ctrl.current.thrust = dy < -JOY_DEAD;
+      onPanResponderMove: (evt) => {
+        const rawDx = evt.nativeEvent.locationX - joyCtr.current.x;
+        const rawDy = evt.nativeEvent.locationY - joyCtr.current.y;
+        const dist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+        const clamped = Math.min(dist, JOY_MAX);
+        const angle = Math.atan2(rawDy, rawDx);
+        joyOff.current = { x: Math.cos(angle) * clamped, y: Math.sin(angle) * clamped };
+        if (dist > JOY_DEAD && gsRef.current) {
+          gsRef.current.sAngle = angle * (180 / Math.PI) + 90;
+        }
       },
       onPanResponderRelease: () => {
         joyOff.current = { x: 0, y: 0 };
         joyActive.current = false;
-        ctrl.current.left = false;
-        ctrl.current.right = false;
-        ctrl.current.thrust = false;
       },
       onPanResponderTerminate: () => {
         joyOff.current = { x: 0, y: 0 };
         joyActive.current = false;
-        ctrl.current.left = false;
-        ctrl.current.right = false;
-        ctrl.current.thrust = false;
       },
     }),
   ).current;
@@ -1351,41 +1355,53 @@ export default function AsteroidsGame() {
         {/* ── Mobile controls (joystick + fire) ── */}
         {Platform.OS !== 'web' && isPlaying && (
           <View style={s.ctrlOverlay}>
-            {/* Floating joystick touch area */}
-            <View style={s.joyArea} {...joystickPR.panHandlers}>
-              {joyActive.current && (
-                <>
-                  {/* Base ring */}
-                  <View style={[s.joyBase, {
-                    left: joyCtr.current.x - JOY_MAX,
-                    top: joyCtr.current.y - JOY_MAX,
-                  }]} />
-                  {/* Thumb */}
-                  <View style={[s.joyThumb, {
-                    left: joyCtr.current.x + joyOff.current.x - JOY_THUMB_R,
-                    top: joyCtr.current.y + joyOff.current.y - JOY_THUMB_R,
-                  }]} />
-                </>
-              )}
-              {/* Hint when not touching */}
-              {!joyActive.current && (
-                <View style={s.joyHint}>
-                  <View style={s.joyHintRing} />
-                </View>
-              )}
+            {/* Fixed joystick */}
+            <View
+              style={s.joyArea}
+              {...joystickPR.panHandlers}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                joyCtr.current = { x: width / 2, y: height / 2 };
+              }}
+            >
+              {/* Base ring — always visible */}
+              <View style={[s.joyBase, {
+                left: joyCtr.current.x - JOY_MAX,
+                top: joyCtr.current.y - JOY_MAX,
+              }]} />
+              {/* Thumb */}
+              <View style={[s.joyThumb, {
+                left: joyCtr.current.x + joyOff.current.x - JOY_THUMB_R,
+                top: joyCtr.current.y + joyOff.current.y - JOY_THUMB_R,
+              }]} />
             </View>
 
-            {/* Fire button */}
-            <Pressable
-              style={({ pressed }: { pressed: boolean }) => [
-                s.fireBtn,
-                pressed && s.fireBtnActive,
-              ]}
-              onPressIn={() => { ctrl.current.fire = true; }}
-              onPressOut={() => { ctrl.current.fire = false; }}
-            >
-              <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
-            </Pressable>
+            {/* MOVE + FIRE buttons stacked on the right */}
+            <View style={s.rightBtns}>
+              {/* Move / thrust button */}
+              <Pressable
+                style={({ pressed }: { pressed: boolean }) => [
+                  s.moveBtn,
+                  pressed && s.moveBtnActive,
+                ]}
+                onPressIn={() => { ctrl.current.thrust = true; }}
+                onPressOut={() => { ctrl.current.thrust = false; }}
+              >
+                <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>MOVE</Text>
+              </Pressable>
+
+              {/* Fire button */}
+              <Pressable
+                style={({ pressed }: { pressed: boolean }) => [
+                  s.fireBtn,
+                  pressed && s.fireBtnActive,
+                ]}
+                onPressIn={() => { ctrl.current.fire = true; }}
+                onPressOut={() => { ctrl.current.fire = false; }}
+              >
+                <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
+              </Pressable>
+            </View>
           </View>
         )}
       </View>
@@ -1582,6 +1598,7 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CTRL_H,
     flexDirection: 'row', alignItems: 'center',
+    paddingBottom: 24,
   },
 
   /* Joystick */
@@ -1589,25 +1606,36 @@ const s = StyleSheet.create({
   joyBase: {
     position: 'absolute',
     width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
-    borderWidth: 1.5, borderColor: '#2A2A2A',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   joyThumb: {
     position: 'absolute',
     width: JOY_THUMB_R * 2, height: JOY_THUMB_R * 2, borderRadius: JOY_THUMB_R,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)',
-  },
-  joyHint: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  joyHintRing: {
-    width: JOY_MAX * 2, height: JOY_MAX * 2, borderRadius: JOY_MAX,
-    borderWidth: 1, borderColor: '#1A1A1A',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
   },
 
   /* Fire button */
+  rightBtns: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginRight: 30,
+  },
+  moveBtn: {
+    width: 80, height: 80, borderRadius: 40,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  moveBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
   fireBtn: {
-    width: 90, height: 90, borderRadius: 45,
-    marginRight: 30, marginBottom: 4,
+    width: 80, height: 80, borderRadius: 40,
     borderWidth: 2, borderColor: '#8B0000',
     backgroundColor: 'rgba(139,0,0,0.2)',
     justifyContent: 'center', alignItems: 'center',
