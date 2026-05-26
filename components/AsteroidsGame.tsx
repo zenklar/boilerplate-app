@@ -1292,7 +1292,7 @@ export default function AsteroidsGame() {
 
         {/* ── Countdown overlay ── */}
         {insertPhase === 'countdown' && (
-          <View style={s.countdownOverlay}>
+          <View style={[s.countdownOverlay, { width: area.w, height: area.h }]}>
             <Animated.Text
               style={[
                 s.countdownText,
@@ -1307,7 +1307,7 @@ export default function AsteroidsGame() {
 
         {/* ── Game over screen ── */}
         {g?.phase === 'gameover' && insertPhase === null && (
-          <View style={s.gameOverOverlay}>
+          <View style={[s.gameOverOverlay, { width: area.w, height: area.h }]}>
             <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
             <Text style={[s.finalScore, { fontFamily: MONO }]}>{g.score}</Text>
             {newHS && (

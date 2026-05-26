@@ -770,25 +770,27 @@ export default function PongGame() {
             </View>
           )}
 
-          {/* Countdown */}
-          {phase === 'countdown' && (
-            <View style={s.countdownOverlay} pointerEvents="none">
-              <Animated.Text style={[
-                s.countdownText, { fontFamily: MONO },
-                { transform: [{ scale: cdScale }], opacity: cdOpacity },
-              ]}>
-                {countNum === 0 ? 'GO!' : String(countNum)}
-              </Animated.Text>
-            </View>
-          )}
         </View>
         )}
       </View>
 
+      {/* Countdown — root-level overlay so it always centres on the actual
+          screen, not the play frame. */}
+      {phase === 'countdown' && (
+        <View style={[s.countdownOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
+          <Animated.Text style={[
+            s.countdownText, { fontFamily: MONO },
+            { transform: [{ scale: cdScale }], opacity: cdOpacity },
+          ]}>
+            {countNum === 0 ? 'GO!' : String(countNum)}
+          </Animated.Text>
+        </View>
+      )}
+
       {/* Game over — root-level overlay so it covers the entire safe area,
           not just the play frame. */}
       {phase === 'gameover' && (
-        <View style={s.gameOverOverlay}>
+        <View style={[s.gameOverOverlay, { width: area.w, height: area.h }]}>
           <Text style={[
             s.titleText, { fontFamily: MONO },
             playerWon ? { color: '#FFD700' } : { color: '#FFF' },

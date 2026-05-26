@@ -866,7 +866,7 @@ export default function TetrisGame() {
 
       {/* Countdown */}
       {phase === 'countdown' && (
-        <View style={s.countdownOverlay} pointerEvents="none">
+        <View style={[s.countdownOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
           <Animated.Text
             style={[
               s.countdownText,
@@ -881,7 +881,7 @@ export default function TetrisGame() {
 
       {/* Game over */}
       {phase === 'gameover' && (
-        <View style={s.gameOverOverlay}>
+        <View style={[s.gameOverOverlay, { width: area.w, height: area.h }]}>
           <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
           <Text style={[s.finalScore, { fontFamily: MONO }]}>{g?.score ?? 0}</Text>
           {newHS && (

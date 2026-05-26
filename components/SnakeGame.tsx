@@ -542,7 +542,7 @@ export default function SnakeGame() {
 
       {/* ── Countdown ── */}
       {phase === 'countdown' && (
-        <View style={s.countdownOverlay} pointerEvents="none">
+        <View style={[s.countdownOverlay, { width: area.w, height: area.h }]} pointerEvents="none">
           <Animated.Text style={[
             s.countdownText, { fontFamily: MONO },
             { transform: [{ scale: cdScale }], opacity: cdOpacity },
@@ -554,7 +554,7 @@ export default function SnakeGame() {
 
       {/* ── Game Over ── */}
       {phase === 'gameover' && (
-        <View style={s.gameOverOverlay}>
+        <View style={[s.gameOverOverlay, { width: area.w, height: area.h }]}>
           <Text style={[s.titleText, { fontFamily: MONO }]}>GAME OVER</Text>
           <Text style={[s.finalScore, { fontFamily: MONO }]}>{g?.score ?? 0}</Text>
           {newHS && (
