@@ -12,6 +12,7 @@ import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
 import {
   playCoinCollect, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed,
+  warmUpSounds,
 } from '../utils/sounds';
 
 // ── Board dimensions ───────────────────────────────────────────────────────
@@ -202,6 +203,7 @@ export default function SnakeGame() {
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
     usePerformanceStore.getState().load();
+    warmUpSounds();
   }, []);
 
   // Boot the demo when returning to idle.

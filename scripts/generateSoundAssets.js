@@ -179,6 +179,26 @@ function shoot() {
   return softClip(s);
 }
 
+function rotate() {
+  const dur = 0.06;
+  const s = osc({
+    type: 'square', durSec: dur,
+    freqEnv: [{ t: 0, value: 900, type: 'set' }, { t: 0.04, value: 1400, type: 'exp' }],
+    gainEnv: [{ t: 0, value: 0.18, type: 'set' }, { t: 0.05, value: 0.001, type: 'exp' }],
+  });
+  return softClip(s);
+}
+
+function move() {
+  const dur = 0.05;
+  const s = osc({
+    type: 'square', durSec: dur,
+    freqEnv: [{ t: 0, value: 420, type: 'set' }, { t: dur, value: 420, type: 'set' }],
+    gainEnv: [{ t: 0, value: 0.14, type: 'set' }, { t: 0.04, value: 0.001, type: 'exp' }],
+  });
+  return softClip(s);
+}
+
 function enemyShoot() {
   const dur = 0.2;
   const s = osc({
@@ -342,6 +362,8 @@ function thrustLoop() {
 console.log('Rendering arcade sound assets →', OUT_DIR);
 writeWav('shoot.wav',          shoot());
 writeWav('enemy_shoot.wav',    enemyShoot());
+writeWav('rotate.wav',         rotate());
+writeWav('move.wav',           move());
 writeWav('coin_insert.wav',    coinInsert());
 writeWav('coin_collect.wav',   coinCollect());
 writeWav('countdown_1.wav',    countdownBeep(1));

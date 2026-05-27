@@ -14,7 +14,7 @@ import {
   TETROMINOS, TETROMINO_COLORS, TETROMINO_TYPES,
   TetrominoType, BOARD_W, BOARD_H, LINE_SCORE, DROP_FRAMES_PER_LEVEL,
 } from '../constants/tetris';
-import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed } from '../utils/sounds';
+import { playShoot, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed, playRotate, playMove, warmUpSounds } from '../utils/sounds';
 
 /** Classic arcade-style block in a single View: solid color with asymmetric
  *  borders for the highlight/shadow bevel. One View per cell beats stacking
@@ -271,6 +271,10 @@ export default function TetrisGame() {
     useCoinStore.getState().loadCoins();
     useSubscriptionStore.getState().loadSubscription();
     usePerformanceStore.getState().load();
+    // Preload the native audio pools so the first beep — the countdown
+    // tick after a coin insert — isn't lost while expo-audio finishes
+    // loading the WAV asynchronously inside createAudioPlayer().
+    warmUpSounds();
   }, []);
 
   useEffect(() => {
@@ -290,10 +294,10 @@ export default function TetrisGame() {
       if (phase !== 'playing') return;
       switch (e.code) {
         case 'ArrowLeft': case 'KeyA':
-          if (!e.repeat) tryMove(-1, 0);
+          if (!e.repeat && tryMove(-1, 0)) playMove();
           break;
         case 'ArrowRight': case 'KeyD':
-          if (!e.repeat) tryMove(1, 0);
+          if (!e.repeat && tryMove(1, 0)) playMove();
           break;
         case 'ArrowDown': case 'KeyS':
           heldRef.current.down = true;
@@ -550,6 +554,7 @@ export default function TetrisGame() {
 
   function tryRotate(dir: 1 | -1) {
     const g = gsRef.current; if (!g || !g.active) return;
+    const isDemo = phase === 'demo';
     const type = g.active.type;
     const rots = TETROMINOS[type].length;
     const nextRot = (g.active.rot + dir + rots) % rots;
@@ -568,6 +573,7 @@ export default function TetrisGame() {
       if (!collides(g.board, candidate)) {
         g.active = candidate;
         g.lockTimer = 0;
+        if (!isDemo) playRotate();
         setTick((t) => t + 1);
         return;
       }
@@ -1009,7 +1015,7 @@ export default function TetrisGame() {
         <View style={s.ctrlOverlay}>
           {/* Top row: move left/right, rotate CCW/CW, soft drop */}
           <View style={s.ctrlRow}>
-            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => tryMove(-1, 0))} onPressOut={stopHold}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(-1, 0)) playMove(); })} onPressOut={stopHold}>
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>◀</Text>
             </Pressable>
             <Pressable
@@ -1019,7 +1025,7 @@ export default function TetrisGame() {
             >
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
             </Pressable>
-            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => tryMove(1, 0))} onPressOut={stopHold}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(1, 0)) playMove(); })} onPressOut={stopHold}>
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
             </Pressable>
           </View>

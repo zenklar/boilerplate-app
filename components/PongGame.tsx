@@ -13,6 +13,7 @@ import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
 import {
   playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed, playShoot,
+  warmUpSounds,
 } from '../utils/sounds';
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -194,6 +195,7 @@ export default function PongGame() {
   useEffect(() => {
     loadHighScore();
     usePerformanceStore.getState().load();
+    warmUpSounds();
   }, []);
 
   useEffect(() => {

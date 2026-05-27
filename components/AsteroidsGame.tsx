@@ -25,7 +25,7 @@ import { SHIPS } from '../constants/ships';
 import ShipPreview from './ShipPreview';
 import ArcadeCoin from './ArcadeCoin';
 import ENEMY_IMAGES, { ENEMY_DESIGN_IDS } from '../constants/enemyImages';
-import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed, playEnemyShoot } from '../utils/sounds';
+import { playShoot, playThrustStart, playExplosion, playCoinInsert, playCountdownBeep, playCountdownGo, playShipHit, playShipDestroyed, playEnemyShoot, warmUpSounds } from '../utils/sounds';
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
 const BASE_SIM_FPS = 60;
@@ -339,6 +339,7 @@ export default function AsteroidsGame() {
     useSubscriptionStore.getState().loadSubscription();
     useEnemyCodexStore.getState().load();
     usePerformanceStore.getState().load();
+    warmUpSounds();
   }, []);
 
   useEffect(() => {

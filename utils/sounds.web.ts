@@ -26,6 +26,40 @@ function comp(): DynamicsCompressorNode {
   return _comp;
 }
 
+/** Short high-pitched chirp — used for Tetris piece rotation */
+export function playRotate(): void {
+  const a = ac(); if (!a) return;
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(900, a.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1400, a.currentTime + 0.04);
+  gain.gain.setValueAtTime(0.18, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.05);
+  osc.start(a.currentTime);
+  osc.stop(a.currentTime + 0.06);
+}
+
+/** Very short low click — used for Tetris piece left/right motion */
+export function playMove(): void {
+  const a = ac(); if (!a) return;
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(420, a.currentTime);
+  gain.gain.setValueAtTime(0.14, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.04);
+  osc.start(a.currentTime);
+  osc.stop(a.currentTime + 0.05);
+}
+
+/** No-op on web — the AudioContext is created lazily on first user
+ *  gesture, no asset preload needed. Mirrors the native signature so call
+ *  sites stay platform-agnostic. */
+export function warmUpSounds(): void { /* no-op */ }
+
 /** Short square-wave blip — classic laser shot */
 export function playShoot(): void {
   const a = ac(); if (!a) return;

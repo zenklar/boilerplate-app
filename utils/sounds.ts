@@ -73,6 +73,8 @@ function trigger(id: string, source: number, volume = 1, size = POOL_SIZE) {
 const SND = {
   shoot:           require('../assets/sounds/shoot.wav'),
   enemyShoot:      require('../assets/sounds/enemy_shoot.wav'),
+  rotate:          require('../assets/sounds/rotate.wav'),
+  move:            require('../assets/sounds/move.wav'),
   coinInsert:      require('../assets/sounds/coin_insert.wav'),
   coinCollect:     require('../assets/sounds/coin_collect.wav'),
   countdown1:      require('../assets/sounds/countdown_1.wav'),
@@ -95,6 +97,33 @@ export function playShoot(): void {
 
 export function playEnemyShoot(): void {
   trigger('enemyShoot', SND.enemyShoot, 1);
+}
+
+export function playRotate(): void {
+  trigger('rotate', SND.rotate, 1, 3);
+}
+
+export function playMove(): void {
+  trigger('move', SND.move, 1, 3);
+}
+
+/** Eagerly init the audio mode and create the player pools for every
+ *  sound this game will need, so the first call to play*() doesn't have to
+ *  wait for expo-audio to load the asset (which it does asynchronously
+ *  inside createAudioPlayer). Without this, the very first beep after a
+ *  fresh app launch — typically the first countdown tick — can be
+ *  swallowed because the WAV finishes loading after we already called
+ *  play(). Safe to call multiple times. */
+export function warmUpSounds(): void {
+  ensureAudioMode();
+  // Touch every pool once; getPool is idempotent and the players preload
+  // their sources immediately on construction.
+  for (const [id, src] of Object.entries(SND)) {
+    // Default pool size; the looped thrust gets its dedicated player when
+    // playThrustStart() is called, so we skip pre-creating it here.
+    if (id === 'thrustLoop') continue;
+    getPool(id, src as number);
+  }
 }
 
 export function playCoinInsert(): void {
