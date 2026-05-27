@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
   View, Text, Image, StyleSheet, ScrollView,
-  TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator,
+  TouchableOpacity, TextInput, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';

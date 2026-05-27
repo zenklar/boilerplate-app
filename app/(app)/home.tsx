@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, Image, StyleSheet, ScrollView,
-  TouchableOpacity, useWindowDimensions,
+  TouchableOpacity, useWindowDimensions, Platform, ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
@@ -12,6 +12,18 @@ import DailyLoginTile from '../../components/DailyLoginTile';
 const COLS = 3;
 const TILE_GAP = 10;
 const H_PAD = 14;
+const LIGHT_TILE_SHADOW: ViewStyle = Platform.select<ViewStyle>({
+  ios: {
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  android: {
+    elevation: 3,
+  },
+  default: {},
+}) ?? {};
 
 function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
   const { theme } = useTheme();
@@ -28,10 +40,7 @@ function GameTile({ game, tileW }: { game: GameEntry; tileW: number }) {
       style={[
         st.tile,
         { width: tileW, borderRadius: theme.radius.md, borderColor: theme.colors.cardBorder },
-        theme.mode === 'light' && {
-          boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.1)',
-          elevation: 3,
-        },
+        theme.mode === 'light' ? LIGHT_TILE_SHADOW : undefined,
       ]}
     >
       {/* Cover image */}
