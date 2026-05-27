@@ -50,6 +50,9 @@ const DEBRIS_COUNT_SCALE = IS_NATIVE ? 0.45 : 1;
 const DEBRIS_LIFE_SCALE = IS_NATIVE ? 0.65 : 1;
 const MOBILE_SPLIT_ASTEROID_CAP = 14;
 const MOBILE_SHOOT_SFX_EVERY = 2;
+const MOBILE_THRUST_PARTICLE_SCALE = 0.35;
+const MOBILE_THRUST_WHILE_FIRE_SCALE = 0.5;
+const MOBILE_BULLET_CAP_BASE = 26;
 
 const PARTICLE_MAX_LIFE = 16;
 const PARTICLE_SPAWN = 2;
@@ -437,6 +440,7 @@ export default function AsteroidsGame() {
     let lastTs = 0;
     let accMs = 0;
     let budgetSampleMs = 0;
+    let renderGate = 0;
     const MAX_ACCUM_MS = simStepMs * 4;
 
     const scoreBudgetFromFrame = (frameMs: number) => {
@@ -500,7 +504,10 @@ export default function AsteroidsGame() {
         const ex = g.sx + Math.cos(exhaustR) * (SHIP_SIZE / 2);
         const ey = g.sy + Math.sin(exhaustR) * (SHIP_SIZE / 2);
         // Scale particle count with thrust power so gentle pushes emit fewer sparks
-        const spawnBudget = PARTICLE_SPAWN * c.thrustPower * stepMul * effectsScale;
+        const thrustFxScale = Platform.OS === 'web'
+          ? effectsScale
+          : effectsScale * MOBILE_THRUST_PARTICLE_SCALE * (c.fire ? MOBILE_THRUST_WHILE_FIRE_SCALE : 1);
+        const spawnBudget = PARTICLE_SPAWN * c.thrustPower * stepMul * thrustFxScale;
         const particleCount = Math.floor(spawnBudget) + (Math.random() < (spawnBudget % 1) ? 1 : 0);
         for (let i = 0; i < particleCount; i++) {
           const spread = rand(-PARTICLE_SPREAD / 2, PARTICLE_SPREAD / 2);
@@ -539,6 +546,10 @@ export default function AsteroidsGame() {
 
       /* Fire */
       if (c.fire && c.fireCD <= 0) {
+        const nativeBulletCap = Math.max(12, Math.round(MOBILE_BULLET_CAP_BASE * effectsScale));
+        if (!isDemo && IS_NATIVE && g.bullets.length >= nativeBulletCap) {
+          c.fireCD = FIRE_CD;
+        } else {
         const r = toR(g.sAngle - 90);
         const tip = SHIP_SIZE / 2 + 4;
         const bvx = Math.cos(r) * BULLET_SPEED + g.svx;
@@ -560,6 +571,7 @@ export default function AsteroidsGame() {
             mobileShootSfxGate.current = (mobileShootSfxGate.current + 1) % shotSfxCadence;
             if (mobileShootSfxGate.current === 0) playShoot();
           }
+        }
         }
       }
       if (c.fireCD > 0) c.fireCD -= stepMul;
@@ -885,7 +897,22 @@ export default function AsteroidsGame() {
       }
       // Render at most once per animation frame, even if we had to catch up
       // multiple simulation steps during a long frame.
-      if (didStep) setTick((t) => t + 1);
+      if (didStep) {
+        const gNow = gsRef.current;
+        let renderStride = 1;
+        if (Platform.OS !== 'web' && gNow?.phase === 'playing') {
+          const pressure =
+            gNow.asteroids.length * 1.2 +
+            gNow.bullets.length * 1.1 +
+            gNow.particles.length * 0.35 +
+            (ctrl.current.thrustPower > 0 ? 6 : 0) +
+            (ctrl.current.fire ? 6 : 0);
+          if (pressure > 80) renderStride = 3;
+          else if (pressure > 45) renderStride = 2;
+        }
+        renderGate = (renderGate + 1) % renderStride;
+        if (renderGate === 0) setTick((t) => t + 1);
+      }
       rafId = requestAnimationFrame(loop);
     };
 
