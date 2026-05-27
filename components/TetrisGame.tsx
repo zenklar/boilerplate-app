@@ -265,7 +265,6 @@ export default function TetrisGame() {
   const boardSizeRef = useRef({ w: 0, h: 0 });
   const boardRef = useRef<View>(null);
   const effectsBudgetRef = useRef(1);
-  const pieceSfxGateRef = useRef(0);
 
   useEffect(() => {
     loadHighScore(); loadRuns();
@@ -533,12 +532,7 @@ export default function TetrisGame() {
       g.flashTimer = Math.max(4, Math.round(FLASH_FRAMES * (0.6 + effectsScale * 0.4)));
       return;
     }
-    if (!isDemo) {
-      const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
-      const cadence = effectsScale >= 0.85 ? 1 : effectsScale >= 0.65 ? 2 : 3;
-      pieceSfxGateRef.current = (pieceSfxGateRef.current + 1) % cadence;
-      if (pieceSfxGateRef.current === 0) playShoot();
-    }
+    if (!isDemo) playShoot();
     spawnNext(isDemo);
   }
 

@@ -52,7 +52,6 @@ const IS_NATIVE = Platform.OS !== 'web';
 const DEBRIS_COUNT_SCALE = IS_NATIVE ? 0.45 : 1;
 const DEBRIS_LIFE_SCALE = IS_NATIVE ? 0.65 : 1;
 const MOBILE_SPLIT_ASTEROID_CAP = 14;
-const MOBILE_SHOOT_SFX_EVERY = 2;
 const MOBILE_THRUST_PARTICLE_SCALE = 0.35;
 const MOBILE_THRUST_WHILE_FIRE_SCALE = 0.5;
 const MOBILE_BULLET_CAP_BASE = 26;
@@ -314,7 +313,6 @@ export default function AsteroidsGame() {
   const joyTouchId = useRef<number | null>(null);
   const fireTouchId = useRef<number | null>(null);
   const fireActive = useRef(false);
-  const mobileShootSfxGate = useRef(MOBILE_SHOOT_SFX_EVERY - 1);
   // joyZone page-space origin measured via measureInWindow so touch pageX/Y can be
   // converted to joyZone-local coords reliably (changedTouches.locationX/Y are relative
   // to the child element that was touched, not the zone View, causing jumping).
@@ -469,7 +467,6 @@ export default function AsteroidsGame() {
       frame.current += stepMul;
       const c = ctrl.current;
       const effectsScale = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
-      const shotSfxCadence = effectsScale >= 0.85 ? MOBILE_SHOOT_SFX_EVERY : effectsScale >= 0.65 ? 3 : 4;
 
       /* Demo: AI controls the ship (sets sAngle directly + ctrl.fire) */
       if (isDemo) runDemoAI(g, c);
@@ -570,14 +567,7 @@ export default function AsteroidsGame() {
         });
         c.fireCD = FIRE_CD;
         g.bulletsShot++;
-        if (!isDemo) {
-          if (Platform.OS === 'web') {
-            playShoot();
-          } else {
-            mobileShootSfxGate.current = (mobileShootSfxGate.current + 1) % shotSfxCadence;
-            if (mobileShootSfxGate.current === 0) playShoot();
-          }
-        }
+        if (!isDemo) playShoot();
         }
       }
       if (c.fireCD > 0) c.fireCD -= stepMul;

@@ -183,7 +183,6 @@ export default function PongGame() {
   const insertCoinRef   = useRef<() => void>(() => {});
   const triggerBoostRef = useRef<() => void>(() => {});
   const effectsBudgetRef = useRef(1);
-  const hitSfxGateRef = useRef(0);
 
   // Animations
   const coinY        = useRef(new Animated.Value(-60)).current;
@@ -312,10 +311,7 @@ export default function PongGame() {
 
     const maybePlayHitSfx = (isDemoMode: boolean) => {
       if (isDemoMode) return;
-      const fx = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
-      const cadence = fx >= 0.85 ? 1 : fx >= 0.65 ? 2 : 3;
-      hitSfxGateRef.current = (hitSfxGateRef.current + 1) % cadence;
-      if (hitSfxGateRef.current === 0) playShoot();
+      playShoot();
     };
 
     const id = setInterval(() => {
