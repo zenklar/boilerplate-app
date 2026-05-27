@@ -104,10 +104,10 @@ function applyWallBoost(ball: Ball) {
 }
 
 /**
- * Convert remaining player boost ticks into a quick up-and-down paddle lift.
+ * Convert remaining boost ticks into a quick up-and-down paddle lift.
  * The paddle rises rapidly, then falls back during the same boost window.
  */
-function playerBoostLiftFromTicks(ticksLeft: number) {
+function boostLiftFromTicks(ticksLeft: number) {
   if (ticksLeft <= 0) return 0;
   const p = 1 - Math.min(1, ticksLeft / BOOST_ACTIVE_TICKS); // 0 -> 1 over boost window
   if (p < 0.35) return (p / 0.35) * BOOST_BOUNCE_PX;
@@ -176,7 +176,6 @@ export default function PongGame() {
   const targetXRef      = useRef<number | null>(null);
   // Paddle x captured at the moment a touch starts (delta-drag anchor)
   const paddleAtGrantRef = useRef<number>(0);
-  const lastSliderTapRef = useRef<number>(0);
   // Stable ref for current phase (used inside stable event listeners)
   const phaseRef    = useRef<Phase>(phase);
   phaseRef.current  = phase;
@@ -216,6 +215,7 @@ export default function PongGame() {
     if (g.playerBoostCD > 0 || g.playerBoostActive > 0) return;
     g.playerBoostActive = BOOST_ACTIVE_TICKS;
     g.playerBoostCD = BOOST_COOLDOWN_TICKS;
+    if (phaseRef.current === 'playing') playShoot();
   }, []);
   triggerBoostRef.current = triggerPlayerBoost;
 
@@ -265,7 +265,7 @@ export default function PongGame() {
   // Touch drag (mobile + web) — delta-based so coordinate system of the
   // touched view (thumb vs track) never matters; paddle moves by the
   // distance the finger has travelled since touch-start.
-  // A minimal-movement double tap triggers boost.
+  // A minimal-movement single tap triggers boost.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -278,15 +278,9 @@ export default function PongGame() {
         targetXRef.current = paddleAtGrantRef.current + gs.dx;
       },
       onPanResponderRelease: (_e, gs) => {
-        // Double-tap (minimal movement) -> boost; drag -> just release
+        // Single-tap (minimal movement) -> boost; drag -> just release
         if (Math.abs(gs.dx) < 8 && Math.abs(gs.dy) < 8) {
-          const now = Date.now();
-          if (now - lastSliderTapRef.current <= 280) {
-            triggerBoostRef.current();
-            lastSliderTapRef.current = 0;
-          } else {
-            lastSliderTapRef.current = now;
-          }
+          triggerBoostRef.current();
         }
         targetXRef.current = null;
       },
@@ -379,6 +373,7 @@ export default function PongGame() {
       if (cpuReady && cpuDanger && Math.random() < CPU_BOOST_CHANCE_PER_TICK) {
         g.cpuBoostActive = BOOST_ACTIVE_TICKS;
         g.cpuBoostCD = BOOST_COOLDOWN_TICKS;
+        if (!isDemo) playShoot();
       }
 
       // ── Electricity ──
@@ -424,7 +419,7 @@ export default function PongGame() {
 
           // Paddle collision — player (bottom). Boost now physically lifts
           // the paddle, so timing the double tap changes the hit window.
-          const playerLift = playerBoostLiftFromTicks(g.playerBoostActive);
+          const playerLift = boostLiftFromTicks(g.playerBoostActive);
           const playerY = frame.h - PADDLE_MARGIN - playerLift;
           if (ball.vy > 0 && ball.y + halfB >= playerY &&
               ball.y + halfB <= playerY + PADDLE_H + Math.abs(ball.vy * stepMul)) {
@@ -458,7 +453,8 @@ export default function PongGame() {
           }
 
           // Paddle collision — cpu (top)
-          const cpuY = PADDLE_MARGIN + PADDLE_H;
+          const cpuLift = boostLiftFromTicks(g.cpuBoostActive);
+          const cpuY = PADDLE_MARGIN + PADDLE_H + cpuLift;
           if (ball.vy < 0 && ball.y - halfB <= cpuY &&
               ball.y - halfB >= cpuY - PADDLE_H - Math.abs(ball.vy * stepMul)) {
             if (Math.abs(ball.x - g.cpuX) <= halfP + halfB) {
@@ -740,9 +736,10 @@ export default function PongGame() {
   const playerBoostReady  = !!g && g.playerBoostCD === 0 && g.playerBoostActive === 0;
   const playerBoostActive = !!g && g.playerBoostActive > 0;
   const cpuBoostActive    = !!g && g.cpuBoostActive > 0;
-  const playerBoostLift = g ? playerBoostLiftFromTicks(g.playerBoostActive) : 0;
+  const playerBoostLift = g ? boostLiftFromTicks(g.playerBoostActive) : 0;
+  const cpuBoostLift = g ? boostLiftFromTicks(g.cpuBoostActive) : 0;
   const playerColor = playerBoostReady ? '#FFD700' : '#7A5A00';
-  const cpuColor    = cpuBoostActive    ? '#FFFF44' : '#FFFFFF';
+  const cpuColor    = '#FFFFFF';
 
   return (
     <View style={s.root} onLayout={onLayout}>
@@ -770,26 +767,37 @@ export default function PongGame() {
           {showField && cpuBoostActive && (
             <View style={{
               position: 'absolute',
-              left: g!.cpuX - paddleW / 2 - 10, top: PADDLE_MARGIN - 8,
+              left: g!.cpuX - paddleW / 2 - 8, top: PADDLE_MARGIN + cpuBoostLift - 6,
               pointerEvents: 'none',
-              width: paddleW + 20, height: PADDLE_H + 16,
-              backgroundColor: 'rgba(0, 220, 255, 0.28)',
+              width: paddleW + 16, height: PADDLE_H + 12,
+              backgroundColor: 'rgba(255, 215, 0, 0.30)',
               borderRadius: 4,
             }} />
           )}
           {showField && (
             <View style={{
               position: 'absolute',
-              left: g!.cpuX - paddleW / 2, top: PADDLE_MARGIN,
+              left: g!.cpuX - paddleW / 2, top: PADDLE_MARGIN + cpuBoostLift,
               width: paddleW, height: PADDLE_H,
               backgroundColor: cpuColor,
               ...(Platform.OS === 'android' ? null : {
-                boxShadow: cpuBoostActive ? '0px 0px 20px rgba(0, 238, 255, 1)' : 'none',
+                boxShadow: cpuBoostActive ? '0px 0px 20px rgba(255, 215, 0, 0.9)' : 'none',
               }),
             }} />
           )}
 
           {/* Player paddle (bottom) */}
+          {showField && playerBoostActive && (
+            <View style={{
+              position: 'absolute',
+              left: g!.playerX - paddleW / 2 - 8,
+              top: frameH - PADDLE_MARGIN - PADDLE_H - playerBoostLift - 6,
+              pointerEvents: 'none',
+              width: paddleW + 16, height: PADDLE_H + 12,
+              backgroundColor: 'rgba(255, 215, 0, 0.30)',
+              borderRadius: 4,
+            }} />
+          )}
           {showField && (
             <View style={{
               position: 'absolute',
@@ -798,7 +806,7 @@ export default function PongGame() {
               width: paddleW, height: PADDLE_H,
               backgroundColor: playerColor,
               ...(Platform.OS === 'android' ? null : {
-                boxShadow: playerBoostReady ? '0px 0px 6px rgba(255, 215, 0, 0.35)' : 'none',
+                boxShadow: playerBoostActive ? '0px 0px 20px rgba(255, 215, 0, 0.9)' : (playerBoostReady ? '0px 0px 6px rgba(255, 215, 0, 0.35)' : 'none'),
               }),
             }} />
           )}
@@ -829,7 +837,7 @@ export default function PongGame() {
             </Text>
             <View style={s.sliderTrack} />
             <Text style={[s.sliderHintBottom, { fontFamily: MONO }]}>
-              DOUBLE TAP TO BOUNCE
+              SINGLE TAP TO BOUNCE
             </Text>
           </View>
         )}
@@ -928,7 +936,7 @@ export default function PongGame() {
                 gameTitle="PONG"
                 mobileControls={[
                   { keyText: 'TOUCH + DRAG', actionText: 'Move your paddle left and right.' },
-                  { keyText: 'DOUBLE TAP', actionText: 'Trigger a BOOST smash.' },
+                  { keyText: 'SINGLE TAP', actionText: 'Trigger a BOOST smash.' },
                 ]}
                 webControls={[
                   { keyText: 'MOUSE MOVE', actionText: 'Move your paddle.' },

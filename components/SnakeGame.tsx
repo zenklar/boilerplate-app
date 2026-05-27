@@ -11,7 +11,7 @@ import ArcadeCoin from './ArcadeCoin';
 import { fitPreview } from './game/previewFrame';
 import GameControlsInfo from './game/GameControlsInfo';
 import {
-  playShoot, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed,
+  playCoinCollect, playCoinInsert, playCountdownBeep, playCountdownGo, playShipDestroyed,
 } from '../utils/sounds';
 
 // ── Board dimensions ───────────────────────────────────────────────────────
@@ -191,14 +191,11 @@ export default function SnakeGame() {
   const spendCoin  = useCoinStore((s) => s.spendCoin);
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const fpsCap = usePerformanceStore((s) => s.fpsCap);
-  const effectsBudget = usePerformanceStore((s) => s.adaptiveEffectsBudget);
   const setAdaptiveEffectsBudget = usePerformanceStore((s) => s.setAdaptiveEffectsBudget);
 
   const gsRef       = useRef<GS | null>(null);
   /** Buffered directional input (max 2 queued ahead). */
   const dirQueue    = useRef<Dir[]>([]);
-  const effectsBudgetRef = useRef(1);
-  const eatSfxGateRef = useRef(0);
 
   useEffect(() => {
     loadHighScore(); loadRuns();
@@ -206,10 +203,6 @@ export default function SnakeGame() {
     useSubscriptionStore.getState().loadSubscription();
     usePerformanceStore.getState().load();
   }, []);
-
-  useEffect(() => {
-    effectsBudgetRef.current = effectsBudget;
-  }, [effectsBudget]);
 
   // Boot the demo when returning to idle.
   useEffect(() => {
@@ -246,29 +239,24 @@ export default function SnakeGame() {
 
   /* ── Game loop ───────────────────────────────────────────────────────── */
   useEffect(() => {
-    const tickMs = 1000 / fpsCap;
-    const stepMul = BASE_SIM_FPS / fpsCap;
-    let lastTickTs = Date.now();
+    const simFps = fpsCap;
+    const simStepMs = 1000 / simFps;
+    const stepMul = BASE_SIM_FPS / simFps;
+    let rafId = 0;
+    let lastTs = 0;
+    let accMs = 0;
     let budgetSampleMs = 0;
+    const MAX_ACCUM_MS = simStepMs * 4;
 
     const scoreBudgetFromFrame = (frameMs: number) => {
-      const ratio = frameMs / tickMs;
+      const ratio = frameMs / simStepMs;
       if (ratio <= 1.05) return 1;
       if (ratio <= 1.2) return 0.85;
       if (ratio <= 1.45) return 0.65;
       return 0.45;
     };
 
-    const id = setInterval(() => {
-      const now = Date.now();
-      const dtMs = Math.min(50, now - lastTickTs);
-      lastTickTs = now;
-      budgetSampleMs += dtMs;
-      if (budgetSampleMs >= 250) {
-        budgetSampleMs = 0;
-        setAdaptiveEffectsBudget(scoreBudgetFromFrame(dtMs));
-      }
-
+    const step = () => {
       if (phase !== 'playing' && phase !== 'demo') return;
       const g = gsRef.current;
       if (!g) return;
@@ -311,10 +299,7 @@ export default function SnakeGame() {
         if (!isDemo) {
           g.score += SCORE_PER_FOOD * g.level;
           if (g.foodEaten % FOOD_PER_LEVEL === 0) g.level++;
-          const fx = Platform.OS === 'web' ? 1 : effectsBudgetRef.current;
-          const cadence = fx >= 0.85 ? 1 : fx >= 0.65 ? 2 : 3;
-          eatSfxGateRef.current = (eatSfxGateRef.current + 1) % cadence;
-          if (eatSfxGateRef.current === 0) playShoot();
+          playCoinCollect();
         }
         g.food = randomFood(g.snake);
       } else {
@@ -322,8 +307,31 @@ export default function SnakeGame() {
       }
 
       setTick((t) => t + 1);
-    }, tickMs);
-    return () => clearInterval(id);
+    };
+
+    const loop = (ts: number) => {
+      if (!lastTs) lastTs = ts;
+      let dt = ts - lastTs;
+      lastTs = ts;
+      if (dt > 100) dt = 100;
+
+      accMs = Math.min(MAX_ACCUM_MS, accMs + dt);
+      budgetSampleMs += dt;
+      if (budgetSampleMs >= 250) {
+        budgetSampleMs = 0;
+        setAdaptiveEffectsBudget(scoreBudgetFromFrame(dt));
+      }
+
+      while (accMs >= simStepMs) {
+        step();
+        accMs -= simStepMs;
+      }
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
   }, [phase, fpsCap]);
 
   /* ── State helpers ───────────────────────────────────────────────────── */
@@ -522,8 +530,8 @@ export default function SnakeGame() {
             width: cellsW, height: cellsH,
           }}>
 
-          {/* Grid lines — memoized so they don't reconcile on every snake step */}
-          {effectsBudget >= 0.55 && <SnakeGrid cell={CELL} cellsW={cellsW} cellsH={cellsH} />}
+          {/* Grid lines — always rendered to avoid adaptive-budget flicker. */}
+          <SnakeGrid cell={CELL} cellsW={cellsW} cellsH={cellsH} />
 
           {/* Food pellet */}
           {showBoard && (

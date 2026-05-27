@@ -60,7 +60,7 @@ const GAME_FAQS = [
   {
     question: 'How do I play Pong?',
     answer:
-      'Face off against a CPU opponent in a best-of-5 match. Score goals by getting the ball past the CPU\'s paddle. First to win 3 rounds wins the match.\n\nControls (mobile): Touch + drag to move paddle. Double tap to BOOST.\n\nControls (web): Move mouse to control paddle. Click/Shift/W to BOOST.',
+      'Face off against a CPU opponent in a best-of-5 match. Score goals by getting the ball past the CPU\'s paddle. First to win 3 rounds wins the match.\n\nControls (mobile): Touch + drag to move paddle. Single tap to BOOST.\n\nControls (web): Move mouse to control paddle. Click/Shift/W to BOOST.',
   },
   {
     question: 'How do I play Snake?',
