@@ -10,26 +10,23 @@
 
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 
-// One-time audio-mode init. We want game sounds to mix with the silent switch
-// on iOS (playsInSilentMode), not interrupt music, and to keep playing while
-// the device is in silent mode so the user actually hears the SFX.
-let _modeInit = false;
-function ensureAudioMode() {
-  if (_modeInit) return;
-  _modeInit = true;
-  // setAudioModeAsync is async but we don't await — first sound may have to
-  // wait a frame for the mode to settle, which is fine.
-  setAudioModeAsync({
-    playsInSilentMode: true,
-    allowsRecording: false,
-    interruptionMode: 'mixWithOthers',
-    shouldPlayInBackground: false,
-  }).catch(() => { /* silent — sounds will still play with default mode */ });
-}
+// Set the audio mode once at module load — fire-and-forget, completes well
+// before any sound is played. We want game SFX to mix with the iOS silent
+// switch (playsInSilentMode), not interrupt other audio, and keep playing
+// while the device is in silent mode.
+setAudioModeAsync({
+  playsInSilentMode: true,
+  allowsRecording: false,
+  interruptionMode: 'mixWithOthers',
+  shouldPlayInBackground: false,
+}).catch(() => { /* sounds still play with the platform default mode */ });
 
-// Pool size per sound — small enough to keep memory low, large enough that
-// the player can rapidly retrigger (e.g. firing in Asteroids).
-const POOL_SIZE = 4;
+// Pool size per sound. Keep this small — each entry holds a native
+// AudioPlayer, and both iOS and Android have practical limits on how many
+// can coexist before creation starts to fail. 2 is enough for any sound
+// in this app: even Asteroids' rapid fire is capped by FIRE_CD so two
+// players cycle comfortably without truncating each other.
+const POOL_SIZE = 2;
 
 type Pool = {
   players: AudioPlayer[];
@@ -54,7 +51,6 @@ function getPool(id: string, source: number, size = POOL_SIZE): Pool {
 }
 
 function trigger(id: string, source: number, volume = 1, size = POOL_SIZE) {
-  ensureAudioMode();
   const pool = getPool(id, source, size);
   if (pool.players.length === 0) return;
   const player = pool.players[pool.next];
@@ -100,30 +96,28 @@ export function playEnemyShoot(): void {
 }
 
 export function playRotate(): void {
-  trigger('rotate', SND.rotate, 1, 3);
+  trigger('rotate', SND.rotate, 1);
 }
 
 export function playMove(): void {
-  trigger('move', SND.move, 1, 3);
+  trigger('move', SND.move, 1);
 }
 
-/** Eagerly init the audio mode and create the player pools for every
- *  sound this game will need, so the first call to play*() doesn't have to
- *  wait for expo-audio to load the asset (which it does asynchronously
- *  inside createAudioPlayer). Without this, the very first beep after a
- *  fresh app launch — typically the first countdown tick — can be
- *  swallowed because the WAV finishes loading after we already called
- *  play(). Safe to call multiple times. */
+/** Preload the player pools for the few sounds that need to play with
+ *  tight timing right after the game mounts — the coin-insert and the
+ *  countdown beeps. createAudioPlayer() returns synchronously but decodes
+ *  the WAV on a background thread, so the first play() call on a brand
+ *  new player can be silent. For those sounds we can't tolerate a missed
+ *  beep, so we create them ahead of time (size 1 — there's never more
+ *  than one in flight). Other sounds stay lazy so we don't flood the
+ *  native audio system with players we may never need; that flood was
+ *  the actual cause of intermittent dropouts seen across both platforms. */
 export function warmUpSounds(): void {
-  ensureAudioMode();
-  // Touch every pool once; getPool is idempotent and the players preload
-  // their sources immediately on construction.
-  for (const [id, src] of Object.entries(SND)) {
-    // Default pool size; the looped thrust gets its dedicated player when
-    // playThrustStart() is called, so we skip pre-creating it here.
-    if (id === 'thrustLoop') continue;
-    getPool(id, src as number);
-  }
+  getPool('coinInsert',   SND.coinInsert,   1);
+  getPool('countdown1',   SND.countdown1,   1);
+  getPool('countdown2',   SND.countdown2,   1);
+  getPool('countdown3',   SND.countdown3,   1);
+  getPool('countdownGo',  SND.countdownGo,  1);
 }
 
 export function playCoinInsert(): void {
@@ -162,7 +156,6 @@ export function playExplosion(size: 'small' | 'medium' | 'large'): void {
 
 /** Looping thruster rumble. Returns a handle with stop() to silence it. */
 export function playThrustStart(): { stop: () => void } {
-  ensureAudioMode();
   // Single dedicated player so we can loop + stop deterministically.
   let player: AudioPlayer | null = null;
   try {
