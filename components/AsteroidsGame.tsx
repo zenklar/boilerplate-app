@@ -5,6 +5,8 @@ import {
   StyleSheet,
   Pressable,
   LayoutChangeEvent,
+  NativeSyntheticEvent,
+  NativeTouchEvent,
   Platform,
   Animated,
   Image,
@@ -42,6 +44,7 @@ const SAFE_R = 130;
 const INVINCIBLE = 180;
 // Mobile: controls overlay at bottom. Web: full canvas height.
 const CTRL_H = Platform.OS === 'web' ? 0 : 140;
+const CTRL_LEFT_FLEX = 0.58;
 const JOY_MAX = 52;
 const JOY_THUMB_R = 24;
 const JOY_DEAD = JOY_MAX * 0.18;
@@ -128,6 +131,7 @@ interface Particle {
   life: number; maxLife: number; size: number;
   kind: 'thrust' | 'debris';
 }
+type TouchEvt = NativeSyntheticEvent<NativeTouchEvent>;
 interface GS {
   phase: Phase;
   sx: number; sy: number; svx: number; svy: number;
@@ -308,6 +312,7 @@ export default function AsteroidsGame() {
   const joyOff = useRef({ x: 0, y: 0 });
   // Multitouch tracking: each control zone independently tracks its own touch identifier
   const joyTouchId = useRef<number | null>(null);
+  const fireTouchId = useRef<number | null>(null);
   const fireActive = useRef(false);
   const mobileShootSfxGate = useRef(MOBILE_SHOOT_SFX_EVERY - 1);
   // joyZone page-space origin measured via measureInWindow so touch pageX/Y can be
@@ -315,6 +320,7 @@ export default function AsteroidsGame() {
   // to the child element that was touched, not the zone View, causing jumping).
   const joyZoneRef = useRef<View>(null);
   const joyOrigin = useRef({ x: 0, y: 0 });
+  const joyZoneWidth = useRef(0);
   const effectsBudgetRef = useRef(1);
 
   const setIsGamePlaying = useGameUIStore((s) => s.setIsGamePlaying);
@@ -997,6 +1003,7 @@ export default function AsteroidsGame() {
     }
     ctrl.current = { left: false, right: false, thrustPower: 0, fire: false, fireCD: 0 };
     joyTouchId.current = null;
+    fireTouchId.current = null;
     fireActive.current = false;
     joyOff.current = { x: 0, y: 0 };
     setNewHS(false);
@@ -1134,6 +1141,71 @@ export default function AsteroidsGame() {
     } else {
       // Inside dead zone — stop thrusting but keep last ship angle
       ctrl.current.thrustPower = 0;
+    }
+  };
+
+  const releaseJoystickTouch = () => {
+    joyTouchId.current = null;
+    joyOff.current = { x: 0, y: 0 };
+    ctrl.current.thrustPower = 0;
+  };
+
+  const releaseFireTouch = () => {
+    fireTouchId.current = null;
+    fireActive.current = false;
+    ctrl.current.fire = false;
+  };
+
+  const handleControlTouchStart = (e: TouchEvt) => {
+    const changed = e.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+      const t = changed[i];
+      const id = t.identifier as unknown as number;
+      const inJoyZone = t.pageX <= joyOrigin.current.x + joyZoneWidth.current;
+      if (inJoyZone) {
+        if (joyTouchId.current === null) {
+          joyTouchId.current = id;
+          updateJoystick(t.pageX - joyOrigin.current.x, t.pageY - joyOrigin.current.y);
+        }
+      } else if (fireTouchId.current === null) {
+        fireTouchId.current = id;
+        fireActive.current = true;
+        ctrl.current.fire = true;
+      }
+    }
+  };
+
+  const handleControlTouchMove = (e: TouchEvt) => {
+    const changed = e.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+      const t = changed[i];
+      const id = t.identifier as unknown as number;
+      if (id === joyTouchId.current) {
+        updateJoystick(t.pageX - joyOrigin.current.x, t.pageY - joyOrigin.current.y);
+      }
+    }
+  };
+
+  const handleControlTouchEnd = (e: TouchEvt) => {
+    const changed = e.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+      const id = changed[i].identifier as unknown as number;
+      if (id === joyTouchId.current) releaseJoystickTouch();
+      if (id === fireTouchId.current) releaseFireTouch();
+    }
+  };
+
+  const handleControlTouchCancel = (e: TouchEvt) => {
+    const changed = e.nativeEvent.changedTouches;
+    if (!changed || changed.length === 0) {
+      releaseJoystickTouch();
+      releaseFireTouch();
+      return;
+    }
+    for (let i = 0; i < changed.length; i++) {
+      const id = changed[i].identifier as unknown as number;
+      if (id === joyTouchId.current) releaseJoystickTouch();
+      if (id === fireTouchId.current) releaseFireTouch();
     }
   };
 
@@ -1516,7 +1588,13 @@ export default function AsteroidsGame() {
 
         {/* ── Mobile controls — multitouch: left zone = joystick, right zone = fire ── */}
         {Platform.OS !== 'web' && isPlaying && (
-          <View style={s.ctrlOverlay}>
+          <View
+            style={s.ctrlOverlay}
+            onTouchStart={handleControlTouchStart}
+            onTouchMove={handleControlTouchMove}
+            onTouchEnd={handleControlTouchEnd}
+            onTouchCancel={handleControlTouchCancel}
+          >
 
             {/* LEFT ZONE: joystick — raw touch events, no PanResponder so fire can fire simultaneously */}
             <View
@@ -1524,6 +1602,7 @@ export default function AsteroidsGame() {
               style={s.joyZone}
               onLayout={(e) => {
                 const { width, height } = e.nativeEvent.layout;
+                joyZoneWidth.current = width;
                 joyCtr.current = { x: width / 2, y: height / 2 };
                 // Measure absolute page position so touch pageX/Y → local coords conversion
                 // is always correct regardless of which child element was the touch target.
@@ -1532,37 +1611,6 @@ export default function AsteroidsGame() {
                 joyZoneRef.current?.measureInWindow((px, py) => {
                   joyOrigin.current = { x: px, y: py };
                 });
-              }}
-              onTouchStart={(e) => {
-                if (joyTouchId.current !== null) return; // already tracking a joystick touch
-                const t = e.nativeEvent.changedTouches[0];
-                joyTouchId.current = t.identifier as unknown as number;
-                updateJoystick(t.pageX - joyOrigin.current.x, t.pageY - joyOrigin.current.y);
-              }}
-              onTouchMove={(e) => {
-                const changed = e.nativeEvent.changedTouches;
-                for (let i = 0; i < changed.length; i++) {
-                  if ((changed[i].identifier as unknown as number) === joyTouchId.current) {
-                    updateJoystick(changed[i].pageX - joyOrigin.current.x, changed[i].pageY - joyOrigin.current.y);
-                    break;
-                  }
-                }
-              }}
-              onTouchEnd={(e) => {
-                const changed = e.nativeEvent.changedTouches;
-                for (let i = 0; i < changed.length; i++) {
-                  if ((changed[i].identifier as unknown as number) === joyTouchId.current) {
-                    joyTouchId.current = null;
-                    joyOff.current = { x: 0, y: 0 };
-                    ctrl.current.thrustPower = 0;
-                    break;
-                  }
-                }
-              }}
-              onTouchCancel={() => {
-                joyTouchId.current = null;
-                joyOff.current = { x: 0, y: 0 };
-                ctrl.current.thrustPower = 0;
               }}
             >
               {/* Outer base ring */}
@@ -1588,18 +1636,6 @@ export default function AsteroidsGame() {
             {/* RIGHT ZONE: fire — independent touch area, works simultaneously with joystick */}
             <View
               style={s.fireZone}
-              onTouchStart={() => {
-                fireActive.current = true;
-                ctrl.current.fire = true;
-              }}
-              onTouchEnd={() => {
-                fireActive.current = false;
-                ctrl.current.fire = false;
-              }}
-              onTouchCancel={() => {
-                fireActive.current = false;
-                ctrl.current.fire = false;
-              }}
             >
               <View style={[s.fireBtn, fireActive.current && s.fireBtnActive]}>
                 <Text style={[s.fireBtnTxt, { fontFamily: MONO }]}>FIRE</Text>
@@ -1825,7 +1861,7 @@ const s = StyleSheet.create({
 
   /* Joystick zone — left 58% of the control strip */
   joyZone: {
-    flex: 0.58,
+    flex: CTRL_LEFT_FLEX,
     height: CTRL_H,
   },
 
@@ -1845,7 +1881,7 @@ const s = StyleSheet.create({
 
   /* Fire zone — right 42% of the control strip */
   fireZone: {
-    flex: 0.42,
+    flex: 1 - CTRL_LEFT_FLEX,
     height: CTRL_H,
     alignItems: 'center',
     justifyContent: 'center',
