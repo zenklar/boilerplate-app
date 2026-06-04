@@ -154,29 +154,30 @@ export function playExplosion(size: 'small' | 'medium' | 'large'): void {
   trigger(`explosion-${size}`, src, 1);
 }
 
+// Persistent module-level thrust player — created once on first thrust and
+// reused for the lifetime of the app. Avoids rapid native player
+// create/destroy cycles when the user toggles thrust quickly (joystick dead
+// zone), which can exhaust Android audio resources and cause native crashes.
+let _thrustPlayer: AudioPlayer | null = null;
+
 /** Looping thruster rumble. Returns a handle with stop() to silence it. */
 export function playThrustStart(): { stop: () => void } {
-  // Single dedicated player so we can loop + stop deterministically.
-  let player: AudioPlayer | null = null;
-  try {
-    player = createAudioPlayer(SND.thrustLoop);
-    player.loop = true;
-    player.volume = 0.7;
-    player.seekTo(0);
-    player.play();
-  } catch (_) {
-    return { stop: () => {} };
+  if (!_thrustPlayer) {
+    try {
+      _thrustPlayer = createAudioPlayer(SND.thrustLoop);
+      _thrustPlayer.loop = true;
+      _thrustPlayer.volume = 0.7;
+    } catch (_) {
+      return { stop: () => {} };
+    }
   }
+  try {
+    _thrustPlayer.seekTo(0);
+    _thrustPlayer.play();
+  } catch (_) { /* ignore — sound will just be silent */ }
   return {
     stop: () => {
-      if (!player) return;
-      try {
-        player.pause();
-        // Defer remove() so an in-flight play() call doesn't error.
-        const p = player;
-        setTimeout(() => { try { p.remove(); } catch (_) {} }, 50);
-      } catch (_) { /* ignore */ }
-      player = null;
+      try { _thrustPlayer?.pause(); } catch (_) {}
     },
   };
 }

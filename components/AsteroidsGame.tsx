@@ -124,7 +124,7 @@ interface Enemy {
   /** Ticks remaining of the deflection shield flash (after an asteroid bounce). */
   shieldFlash: number;
 }
-interface EnemyBullet { x: number; y: number; vx: number; vy: number; life: number; angle: number; }
+interface EnemyBullet { id: number; x: number; y: number; vx: number; vy: number; life: number; angle: number; }
 interface Particle {
   id: number; x: number; y: number; vx: number; vy: number;
   life: number; maxLife: number; size: number;
@@ -683,6 +683,7 @@ export default function AsteroidsGame() {
           const evx = Math.cos(r) * ENEMY_BULLET_SPEED;
           const evy = Math.sin(r) * ENEMY_BULLET_SPEED;
           g.enemyBullets.push({
+            id: uid(),
             x: e.x + Math.cos(r) * (ENEMY_RADIUS + 4),
             y: e.y + Math.sin(r) * (ENEMY_RADIUS + 4),
             vx: evx, vy: evy,
@@ -1396,7 +1397,7 @@ export default function AsteroidsGame() {
         {/* Enemy bullets — red laser bolts */}
         {g?.phase === 'playing' && g.enemyBullets.map((b, i) => (
           <View
-            key={`eb${i}`}
+            key={`eb${b.id}`}
             style={[
               s.enemyBullet,
               { left: b.x - BULLET_LEN / 2, top: b.y - BULLET_W / 2, transform: [{ rotate: `${b.angle}deg` }] },
@@ -1423,7 +1424,7 @@ export default function AsteroidsGame() {
           }
           return (
             <View
-              key={`${p.id}-${i}`}
+              key={p.id}
               style={{
                 position: 'absolute',
                 width: p.size, height: p.size,
