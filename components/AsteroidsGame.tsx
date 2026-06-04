@@ -62,9 +62,9 @@ const PARTICLE_SPREAD = 0.5;
 
 const RADII = { large: 44, medium: 26, small: 14 } as const;
 const SPEEDS: Record<string, [number, number]> = {
-  large: [0.5, 1.4],
-  medium: [0.9, 2.3],
-  small: [1.6, 3.4],
+  large: [0.25, 0.7],
+  medium: [0.45, 1.15],
+  small: [0.8, 1.7],
 };
 const SCORE_MAP: Record<string, number> = { large: 20, medium: 50, small: 100 };
 
@@ -656,7 +656,7 @@ export default function AsteroidsGame() {
         // Drift movement
         e.driftCD -= stepMul;
         if (e.driftCD <= 0) {
-          const baseSpd = 1.2 + Math.min(1.4, (g.level - ENEMY_FIRST_LEVEL) * 0.12);
+          const baseSpd = 0.6 + Math.min(0.7, (g.level - ENEMY_FIRST_LEVEL) * 0.06);
           const dir = rand(0, Math.PI * 2);
           e.vx = Math.cos(dir) * baseSpd;
           e.vy = Math.sin(dir) * baseSpd * 0.55;

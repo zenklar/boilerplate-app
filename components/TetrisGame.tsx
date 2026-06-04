@@ -224,6 +224,8 @@ export default function TetrisGame() {
   const coinOpacity = useRef(new Animated.Value(0)).current;
   const cdScale = useRef(new Animated.Value(1)).current;
   const cdOpacity = useRef(new Animated.Value(0)).current;
+  const wallFlashL = useRef(new Animated.Value(0)).current;
+  const wallFlashR = useRef(new Animated.Value(0)).current;
 
   const highScore = useTetrisStore((s) => s.highScore);
   const updateHighScore = useTetrisStore((s) => s.updateHighScore);
@@ -294,10 +296,10 @@ export default function TetrisGame() {
       if (phase !== 'playing') return;
       switch (e.code) {
         case 'ArrowLeft': case 'KeyA':
-          if (!e.repeat && tryMove(-1, 0)) playMove();
+          if (!e.repeat) { if (tryMove(-1, 0, true)) playMove(); }
           break;
         case 'ArrowRight': case 'KeyD':
-          if (!e.repeat && tryMove(1, 0)) playMove();
+          if (!e.repeat) { if (tryMove(1, 0, true)) playMove(); }
           break;
         case 'ArrowDown': case 'KeyS':
           heldRef.current.down = true;
@@ -540,7 +542,7 @@ export default function TetrisGame() {
     spawnNext(isDemo);
   }
 
-  function tryMove(dx: number, dy: number) {
+  function tryMove(dx: number, dy: number, flash = false) {
     const g = gsRef.current; if (!g || !g.active) return false;
     const moved = { ...g.active, x: g.active.x + dx, y: g.active.y + dy };
     if (!collides(g.board, moved)) {
@@ -548,6 +550,11 @@ export default function TetrisGame() {
       if (dy === 0) g.lockTimer = 0; // sliding cancels lock delay
       setTick((t) => t + 1);
       return true;
+    }
+    if (flash && dx !== 0) {
+      const val = dx < 0 ? wallFlashL : wallFlashR;
+      val.setValue(1);
+      Animated.timing(val, { toValue: 0, duration: 150, useNativeDriver: true }).start();
     }
     return false;
   }
@@ -913,6 +920,18 @@ export default function TetrisGame() {
             ));
           })()}
           </View>
+          {/* Wall-hit flash strips — illuminate the left/right board edge when a
+              horizontal move is blocked by the wall or a locked piece. */}
+          <Animated.View pointerEvents="none" style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
+            backgroundColor: '#4AF',
+            opacity: wallFlashL,
+          }} />
+          <Animated.View pointerEvents="none" style={{
+            position: 'absolute', right: 0, top: 0, bottom: 0, width: 4,
+            backgroundColor: '#4AF',
+            opacity: wallFlashR,
+          }} />
         </Pressable>
 
         </>)}
@@ -1015,7 +1034,7 @@ export default function TetrisGame() {
         <View style={s.ctrlOverlay}>
           {/* Top row: move left/right, rotate CCW/CW, soft drop */}
           <View style={s.ctrlRow}>
-            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(-1, 0)) playMove(); })} onPressOut={stopHold}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(-1, 0, true)) playMove(); })} onPressOut={stopHold}>
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>◀</Text>
             </Pressable>
             <Pressable
@@ -1025,7 +1044,7 @@ export default function TetrisGame() {
             >
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▼</Text>
             </Pressable>
-            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(1, 0)) playMove(); })} onPressOut={stopHold}>
+            <Pressable style={s.ctrlBtn} onPressIn={() => startHold(() => { if (tryMove(1, 0, true)) playMove(); })} onPressOut={stopHold}>
               <Text style={[s.ctrlBtnTxt, { fontFamily: MONO }]}>▶</Text>
             </Pressable>
           </View>
