@@ -52,4 +52,14 @@ export const GAME_LIST: GameEntry[] = [
     accentColor: '#FFFFFF',
     image: require('../assets/games/pong.png'),
   },
+  {
+    id: 'go',
+    title: 'Go',
+    year: '~2500 BC',
+    genre: 'Strategy',
+    available: true,
+    route: '/game/go',
+    accentColor: '#C08840',
+    image: require('../assets/games/go.png'),
+  },
 ];
