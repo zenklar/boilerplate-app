@@ -62,4 +62,14 @@ export const GAME_LIST: GameEntry[] = [
     accentColor: '#C08840',
     image: require('../assets/games/go.png'),
   },
+  {
+    id: 'hill-climb',
+    title: 'Hill Climb Racing',
+    year: '2012',
+    genre: 'Racing',
+    available: true,
+    route: '/game/hill-climb',
+    accentColor: '#51CF66',
+    image: require('../assets/games/hill-climb.png'),
+  },
 ];
