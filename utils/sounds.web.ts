@@ -310,3 +310,117 @@ export function playExplosion(size: 'small' | 'medium' | 'large'): void {
     osc.stop(a.currentTime + dur);
   }
 }
+
+/** Soft wooden knock — Go stone placed on board */
+export function playStonePlace(): void {
+  const a = ac(); if (!a) return;
+  // Short percussive noise burst shaped like a wooden knock
+  const dur = 0.06;
+  const bufLen = Math.round(a.sampleRate * dur);
+  const buf = a.createBuffer(1, bufLen, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 1.8);
+  }
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const filt = a.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.value = 900;
+  filt.Q.value = 1.2;
+  const gain = a.createGain();
+  gain.gain.value = 0.5;
+  src.connect(filt); filt.connect(gain); gain.connect(comp());
+  src.start();
+
+  // Resonant "clack" tone underneath
+  const osc = a.createOscillator();
+  const og = a.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(420, a.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(200, a.currentTime + 0.05);
+  og.gain.setValueAtTime(0.18, a.currentTime);
+  og.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.06);
+  osc.connect(og); og.connect(comp());
+  osc.start(a.currentTime); osc.stop(a.currentTime + 0.07);
+}
+
+/** Quick multi-pop — played when opponent's stones are captured */
+export function playStoneCapture(count: number = 1): void {
+  const a = ac(); if (!a) return;
+  const n = Math.min(count, 4);
+  for (let i = 0; i < n; i++) {
+    const t = a.currentTime + i * 0.04;
+    const osc = a.createOscillator();
+    const og = a.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(600 - i * 60, t);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.07);
+    og.gain.setValueAtTime(0.16, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc.connect(og); og.connect(comp());
+    osc.start(t); osc.stop(t + 0.09);
+  }
+}
+
+/** Low thud — illegal move attempt (e.g. suicide, ko) */
+export function playIllegalMove(): void {
+  const a = ac(); if (!a) return;
+  const osc = a.createOscillator();
+  const gain = a.createGain();
+  osc.connect(gain); gain.connect(comp());
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(100, a.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(60, a.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.2, a.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.15);
+  osc.start(a.currentTime); osc.stop(a.currentTime + 0.16);
+}
+
+/** Pass move chime */
+export function playPassMove(): void {
+  const a = ac(); if (!a) return;
+  [523, 659].forEach((freq, i) => {
+    const t = a.currentTime + i * 0.08;
+    const osc = a.createOscillator();
+    const og = a.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    og.gain.setValueAtTime(0.18, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og); og.connect(comp());
+    osc.start(t); osc.stop(t + 0.24);
+  });
+}
+
+/** Win fanfare */
+export function playGoWin(): void {
+  const a = ac(); if (!a) return;
+  [523, 659, 784, 1047, 1319].forEach((freq, i) => {
+    const t = a.currentTime + i * 0.1;
+    const osc = a.createOscillator();
+    const og = a.createGain();
+    osc.type = i < 4 ? 'square' : 'sine';
+    osc.frequency.value = freq;
+    og.gain.setValueAtTime(0.22, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og); og.connect(comp());
+    osc.start(t); osc.stop(t + 0.24);
+  });
+}
+
+/** Lose sound */
+export function playGoLose(): void {
+  const a = ac(); if (!a) return;
+  [440, 350, 220].forEach((freq, i) => {
+    const t = a.currentTime + i * 0.14;
+    const osc = a.createOscillator();
+    const og = a.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    og.gain.setValueAtTime(0.18, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc.connect(og); og.connect(comp());
+    osc.start(t); osc.stop(t + 0.26);
+  });
+}

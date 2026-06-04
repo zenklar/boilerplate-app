@@ -181,3 +181,33 @@ export function playThrustStart(): { stop: () => void } {
     },
   };
 }
+
+/** Go stone placed — reuse move click on native */
+export function playStonePlace(): void {
+  trigger('move', SND.move, 0.9);
+}
+
+/** Go capture — reuse small explosion on native */
+export function playStoneCapture(_count: number = 1): void {
+  trigger('explosion-small', SND.explosionSmall, 0.55);
+}
+
+/** Illegal move — low buzz, reuse ship_hit at low volume */
+export function playIllegalMove(): void {
+  trigger('shipHit', SND.shipHit, 0.3);
+}
+
+/** Pass move — use rotate chime on native */
+export function playPassMove(): void {
+  trigger('rotate', SND.rotate, 0.8);
+}
+
+/** Win fanfare — reuse countdown go sound */
+export function playGoWin(): void {
+  trigger('countdownGo', SND.countdownGo, 1, 2);
+}
+
+/** Lose sound — reuse ship destroyed at lower volume */
+export function playGoLose(): void {
+  trigger('shipDestroyed', SND.shipDestroyed, 0.4);
+}
